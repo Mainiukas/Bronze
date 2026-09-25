@@ -1,0 +1,447 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   THEME TOKENS
+   Every color in the UI comes from these tokens. Tailwind turns each one
+   into both a CSS variable (e.g. --color-bronze-400) and utilities
+   (e.g. bg-bronze-400, text-bronze-400/60). Change a value here to
+   re-theme the whole app.
+   ========================================================================== */
+@theme {
+  --font-sans: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces: soot and cast iron */
+  --color-soot-950: #0b0806;
+  --color-soot-900: #120d0a;
+  --color-soot-850: #17110d;
+  --color-soot-800: #1d1611;
+  --color-soot-700: #291f18;
+  --color-soot-600: #372a20;
+  --color-soot-500: #4d3b2c;
+
+  /* Primary accent: bronze */
+  --color-bronze-100: #faead4;
+  --color-bronze-200: #f3d2a8;
+  --color-bronze-300: #e8b57c;
+  --color-bronze-400: #d9964f;
+  --color-bronze-500: #c27a36;
+  --color-bronze-600: #9c5d26;
+  --color-bronze-700: #74431c;
+  --color-bronze-800: #4e2d13;
+
+  /* Secondary accents: copper and brass */
+  --color-copper-300: #eea07d;
+  --color-copper-400: #e0835a;
+  --color-copper-500: #c4633a;
+  --color-brass-200: #f7e7b4;
+  --color-brass-300: #f0d78a;
+  --color-brass-400: #dcb85c;
+  --color-brass-500: #b8963a;
+
+  /* Furnace glow */
+  --color-ember-300: #ffc08a;
+  --color-ember-400: #ff9d4d;
+  --color-ember-500: #ff7a1a;
+
+  /* Copper patina, used for water and canals */
+  --color-verdigris-300: #8cc7bf;
+  --color-verdigris-400: #5fa39b;
+  --color-verdigris-500: #3f7f78;
+
+  /* Text: aged paper */
+  --color-parchment-50: #fbf4e6;
+  --color-parchment-100: #f2e6cf;
+  --color-parchment-200: #dccbaa;
+  --color-parchment-300: #b9a584;
+  --color-parchment-400: #8f7d62;
+  --color-parchment-500: #6b5c48;
+
+  /* Destructive actions */
+  --color-rust-300: #f09a86;
+  --color-rust-400: #e0644a;
+  --color-rust-500: #c2452d;
+
+  --animate-spin-slow: spin 80s linear infinite;
+  --animate-spin-slower-reverse: spin-reverse 120s linear infinite;
+  --animate-sheen: sheen 6s ease-in-out infinite;
+  --animate-glow-pulse: glow-pulse 2.8s ease-in-out infinite;
+  --animate-toast-in: toast-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes spin-reverse {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+  @keyframes sheen {
+    0%,
+    100% {
+      background-position: 50% 0%;
+    }
+    50% {
+      background-position: 50% 100%;
+    }
+  }
+  @keyframes glow-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    50% {
+      opacity: 0.85;
+      transform: scale(1.02);
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.96);
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+}
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-soot-950 font-sans text-parchment-100 antialiased;
+    min-height: 100dvh;
+  }
+
+  /* Stop the page scrolling behind an open modal or drawer. */
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass-300);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-bronze-500) 55%, transparent);
+    color: var(--color-parchment-50);
+  }
+}
+
+/* ==========================================================================
+   COMPONENT CLASSES
+   Small, reusable building blocks shared by several components.
+   ========================================================================== */
+@layer components {
+  /* A riveted metal plate: the default panel surface. */
+  .plate {
+    @apply relative rounded-2xl border border-bronze-500/25 bg-soot-900/80 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.8),inset_0_1px_0_rgb(243_210_168/0.08)] backdrop-blur-md;
+  }
+
+  /* Four little rivets in the corners of any positioned element. */
+  .rivets::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    --rivet: radial-gradient(
+      circle,
+      var(--color-bronze-300) 0,
+      var(--color-bronze-600) 1.6px,
+      transparent 2.4px
+    );
+    background:
+      var(--rivet) 10px 10px / 6px 6px no-repeat,
+      var(--rivet) calc(100% - 10px) 10px / 6px 6px no-repeat,
+      var(--rivet) 10px calc(100% - 10px) / 6px 6px no-repeat,
+      var(--rivet) calc(100% - 10px) calc(100% - 10px) / 6px 6px no-repeat;
+    opacity: 0.7;
+  }
+
+  /* Round icon button used in the top bar and panel headers. */
+  .icon-btn {
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-bronze-500/40 bg-linear-to-b from-soot-700 to-soot-850 text-lg text-parchment-100 shadow-[inset_0_1px_0_rgb(243_210_168/0.15),0_4px_14px_-6px_rgb(0_0_0/0.9)] transition duration-150 select-none hover:border-bronze-300/70 hover:text-parchment-50 hover:shadow-[inset_0_1px_0_rgb(243_210_168/0.2),0_0_18px_-4px_rgb(255_157_77/0.55)] active:scale-95;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-display text-base font-bold tracking-[0.12em] uppercase transition duration-150 select-none active:translate-y-px disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  /* Use together with .btn, e.g. className="btn btn-primary". */
+  .btn-primary {
+    @apply bg-linear-to-b from-brass-300 via-bronze-400 to-bronze-600 text-soot-950 shadow-[0_3px_0_var(--color-bronze-800),0_8px_20px_-8px_rgb(255_122_26/0.7)] hover:brightness-110 active:shadow-[0_1px_0_var(--color-bronze-800)];
+  }
+
+  .btn-ghost {
+    @apply border border-bronze-500/35 bg-soot-800/60 text-parchment-200 hover:border-bronze-300/60 hover:text-parchment-50;
+  }
+
+  /* Tints a color emoji (e.g. 👥) toward bronze so it matches the theme. */
+  .emoji-bronze {
+    filter: grayscale(1) sepia(1) saturate(2.2) brightness(1.05);
+  }
+
+  /* Small uppercase eyebrow label above headings. */
+  .eyebrow {
+    @apply font-display text-xs font-semibold tracking-[0.3em] text-bronze-300/80 uppercase;
+  }
+
+  /* Metallic gradient text for headings. */
+  .metal-text {
+    @apply bg-linear-to-b from-brass-200 via-bronze-400 to-bronze-700 bg-clip-text text-transparent;
+    background-size: 100% 220%;
+  }
+}
+
+/* ==========================================================================
+   DIALOGS (native <dialog>: modals and slide-in drawers)
+   Enter/exit transitions use @starting-style + allow-discrete; browsers
+   without support simply open and close without animating.
+   ========================================================================== */
+dialog.bz-dialog {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  opacity: 0;
+  transition:
+    opacity 0.25s ease,
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    overlay 0.3s allow-discrete,
+    display 0.3s allow-discrete;
+}
+dialog.bz-dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+dialog.bz-dialog::backdrop {
+  background-color: rgb(5 3 2 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background-color 0.3s ease,
+    backdrop-filter 0.3s ease,
+    overlay 0.3s allow-discrete,
+    display 0.3s allow-discrete;
+}
+dialog.bz-dialog[open]::backdrop {
+  background-color: rgb(5 3 2 / 0.65);
+  backdrop-filter: blur(4px);
+}
+
+/* Centered modal */
+dialog.bz-dialog--modal {
+  inset: 0;
+  margin: auto;
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  transform: translateY(16px) scale(0.97);
+}
+
+/* Drawer that slides in from the left edge */
+dialog.bz-dialog--drawer-left {
+  inset: 0 auto 0 0;
+  height: 100dvh;
+  width: min(24rem, 88vw);
+  transform: translateX(-100%);
+}
+
+@starting-style {
+  dialog.bz-dialog[open] {
+    opacity: 0;
+  }
+  dialog.bz-dialog--modal[open] {
+    transform: translateY(16px) scale(0.97);
+  }
+  dialog.bz-dialog--drawer-left[open] {
+    transform: translateX(-100%);
+  }
+  dialog.bz-dialog[open]::backdrop {
+    background-color: rgb(5 3 2 / 0);
+    backdrop-filter: blur(0);
+  }
+}
+
+/* ==========================================================================
+   FORM CONTROLS
+   ========================================================================== */
+
+/* Range slider. The filled part of the track follows the --fill variable
+   (set inline to the current value as a percentage). */
+.bz-range {
+  --fill: 50%;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+.bz-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-bronze-300),
+    var(--color-ember-500) var(--fill),
+    var(--color-soot-600) var(--fill)
+  );
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.6);
+}
+.bz-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-soot-600);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.6);
+}
+.bz-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-bronze-300), var(--color-ember-500));
+}
+.bz-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 2px solid var(--color-soot-900);
+  background: radial-gradient(circle at 35% 30%, var(--color-brass-200), var(--color-bronze-500) 70%);
+  box-shadow: 0 0 0 1px var(--color-bronze-400), 0 2px 8px rgb(0 0 0 / 0.6);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.bz-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-soot-900);
+  background: radial-gradient(circle at 35% 30%, var(--color-brass-200), var(--color-bronze-500) 70%);
+  box-shadow: 0 0 0 1px var(--color-bronze-400), 0 2px 8px rgb(0 0 0 / 0.6);
+}
+.bz-range:hover::-webkit-slider-thumb,
+.bz-range:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1px var(--color-bronze-300), 0 0 14px rgb(255 157 77 / 0.7);
+}
+
+/* Hide scrollbars on horizontally scrolling rows (still scrollable). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==========================================================================
+   BACKGROUND SCENE: furnace glow, drifting smoke, rising embers
+   ========================================================================== */
+.scene-glow {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 115%, rgb(255 122 26 / 0.2), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 90% -5%, rgb(194 122 54 / 0.14), transparent 70%),
+    radial-gradient(ellipse 45% 35% at 5% 10%, rgb(95 163 155 / 0.06), transparent 70%);
+}
+
+.scene-grid {
+  background-image:
+    linear-gradient(to right, rgb(232 181 124 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(232 181 124 / 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent);
+}
+
+.scene-vignette {
+  background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgb(0 0 0 / 0.7));
+}
+
+.scene-smoke {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(220 203 170 / 0.07), transparent 65%);
+  animation: smoke-drift 38s ease-in-out infinite alternate;
+}
+
+@keyframes smoke-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6vw, -8vh, 0) scale(1.25);
+  }
+}
+
+.scene-ember {
+  position: absolute;
+  bottom: -10px;
+  border-radius: 50%;
+  background: var(--color-ember-300);
+  box-shadow:
+    0 0 6px 2px rgb(255 157 77 / 0.8),
+    0 0 14px 4px rgb(255 122 26 / 0.35);
+  opacity: 0;
+  animation: ember-rise linear infinite;
+}
+
+@keyframes ember-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(var(--drift, 30px), -75vh, 0);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   MAP PREVIEWS
+   ========================================================================== */
+.map-town-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: town-pulse 2.2s ease-out infinite;
+}
+
+@keyframes town-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY: honour reduced-motion preferences everywhere.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
