@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   gameMode: 'bronze.lobby.gameMode',
   map: 'bronze.lobby.map',
   settings: 'bronze.settings',
+  match: 'bronze.match',
+  stats: 'bronze.stats',
 } as const
 
 /** Read and JSON-parse a value. Returns undefined if absent or unreadable. */

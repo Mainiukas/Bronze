@@ -8,6 +8,8 @@ export const PATHS = {
   shop: '/shop',
   achievements: '/achievements',
   tournaments: '/tournaments',
+  /** The match screen (not a tab). */
+  play: '/play',
 } as const
 
 export interface NavTab {

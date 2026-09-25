@@ -30,7 +30,7 @@ export function MapCard({ map, selected, onSelect }: MapCardProps) {
         }`}
       >
         <span className="block h-full w-full p-1.5 transition-transform duration-500 ease-out group-hover:scale-105">
-          <MapPreview preview={map.preview} active={selected} />
+          <MapPreview board={map.board} active={selected} />
         </span>
         <span className="absolute top-1.5 left-1.5 rounded bg-soot-950/80 px-1.5 py-0.5 font-display text-[0.65rem] font-semibold tracking-[0.2em] text-bronze-200 uppercase">
           {map.terrain}
@@ -51,7 +51,7 @@ export function MapCard({ map, selected, onSelect }: MapCardProps) {
             <IconUsers className="size-3.5" />
             {formatPlayers(map.players)}
           </span>
-          <span className="text-parchment-400">{map.preview.towns.length} towns</span>
+          <span className="text-parchment-400">{map.board.towns.length} towns</span>
         </span>
       </span>
 

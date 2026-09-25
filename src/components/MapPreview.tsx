@@ -1,7 +1,7 @@
-import type { MapLandmark, MapPreviewData } from '../data/maps'
+import type { MapBoardData, MapLandmark } from '../data/maps'
 
 interface MapPreviewProps {
-  preview: MapPreviewData
+  board: MapBoardData
   /** Highlight the network (used for the selected map). */
   active?: boolean
 }
@@ -10,13 +10,13 @@ interface MapPreviewProps {
  * Schematic SVG drawing of a map, generated from the map's data:
  * hills as contour rings, water, canal and rail links, landmarks and towns.
  */
-export function MapPreview({ preview, active = false }: MapPreviewProps) {
-  const towns = new Map(preview.towns.map((town) => [town.id, town]))
+export function MapPreview({ board, active = false }: MapPreviewProps) {
+  const towns = new Map(board.towns.map((town) => [town.id, town]))
 
   return (
     <svg viewBox="0 0 160 100" className="block h-full w-full" aria-hidden="true" focusable="false">
       {/* Hills: three contour rings each */}
-      {preview.hills?.map((hill, i) =>
+      {board.hills?.map((hill, i) =>
         [1, 0.68, 0.36].map((k) => (
           <ellipse
             key={`${i}-${k}`}
@@ -31,7 +31,7 @@ export function MapPreview({ preview, active = false }: MapPreviewProps) {
       )}
 
       {/* Water */}
-      {preview.water?.map((water, i) =>
+      {board.water?.map((water, i) =>
         water.fill ? (
           <path key={i} d={water.path} className="fill-verdigris-500/40 stroke-verdigris-400/60" strokeWidth={0.6} />
         ) : (
@@ -51,7 +51,7 @@ export function MapPreview({ preview, active = false }: MapPreviewProps) {
           active ? 'text-brass-300 drop-shadow-[0_0_2px_rgb(255_157_77/0.9)]' : 'text-bronze-400/70'
         }`}
       >
-        {preview.links.map((link) => {
+        {board.links.map((link) => {
           const a = towns.get(link.from)
           const b = towns.get(link.to)
           if (!a || !b) return null
@@ -79,14 +79,14 @@ export function MapPreview({ preview, active = false }: MapPreviewProps) {
       </g>
 
       {/* Landmarks */}
-      {preview.landmarks?.map((landmark, i) => <Landmark key={i} {...landmark} />)}
+      {board.landmarks?.map((landmark, i) => <Landmark key={i} {...landmark} />)}
 
       {/* Towns */}
-      {preview.towns.map((town) => {
-        const r = town.city ? 4 : 2.7
+      {board.towns.map((town) => {
+        const r = town.market ? 4 : 2.7
         return (
           <g key={town.id}>
-            {active && town.city && (
+            {active && town.market && (
               <circle cx={town.x} cy={town.y} r={r} className="map-town-pulse fill-none stroke-ember-400" strokeWidth={0.8} />
             )}
             <circle
@@ -99,7 +99,7 @@ export function MapPreview({ preview, active = false }: MapPreviewProps) {
             <circle
               cx={town.x}
               cy={town.y}
-              r={town.city ? 1.7 : 1}
+              r={town.market ? 1.7 : 1}
               className={active ? 'fill-ember-300' : 'fill-bronze-300'}
             />
           </g>

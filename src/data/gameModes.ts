@@ -17,10 +17,19 @@ export interface GameModeConfig {
   /** One-line summary shown on the card. */
   readonly description: string
   readonly icon: ModeIconName
-  /** Seconds each player gets per turn. Not used until gameplay exists. */
+  /** Seconds each player gets per turn (when the move timer is on). */
   readonly turnTimerSeconds: number
-  /** Which cut of the chosen map this mode plays on. */
+  /**
+   * Which cut of the chosen map this mode plays on: `full` uses every town,
+   * `reduced` drops the outer ring, `compact` keeps only the core.
+   */
   readonly mapSize: 'full' | 'reduced' | 'compact'
+  /** Number of rounds in a match. */
+  readonly rounds: number
+  /** Money each player starts with (£). */
+  readonly startingMoney: number
+  /** Pause between computer players' actions, so you can follow them (ms). */
+  readonly aiDelayMs: number
 }
 
 export const GAME_MODES = [
@@ -32,6 +41,9 @@ export const GAME_MODES = [
     icon: 'factory',
     turnTimerSeconds: 120,
     mapSize: 'full',
+    rounds: 10,
+    startingMoney: 14,
+    aiDelayMs: 900,
   },
   {
     id: 'blitz',
@@ -41,6 +53,9 @@ export const GAME_MODES = [
     icon: 'bolt',
     turnTimerSeconds: 45,
     mapSize: 'reduced',
+    rounds: 7,
+    startingMoney: 16,
+    aiDelayMs: 650,
   },
   {
     id: 'bullet',
@@ -50,6 +65,9 @@ export const GAME_MODES = [
     icon: 'stopwatch',
     turnTimerSeconds: 15,
     mapSize: 'compact',
+    rounds: 5,
+    startingMoney: 18,
+    aiDelayMs: 400,
   },
 ] as const satisfies readonly GameModeConfig[]
 

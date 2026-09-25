@@ -1,3 +1,7 @@
+import type { ReactNode } from 'react'
+import { formatCost } from '../game/engine'
+import { INDUSTRIES, INDUSTRY_ORDER, LINK_COST, RULES } from '../game/rules'
+import { IndustryIcon } from './game/IndustryIcon'
 import { IconBook, IconStar } from './icons'
 import { ModalFrame } from './ModalFrame'
 
@@ -6,37 +10,107 @@ interface InfoModalProps {
   onClose: () => void
 }
 
-const HOW_TO_PLAY_STEPS = [
-  { title: 'Build', text: 'Found workshops, forges and mills in the towns you can reach.' },
-  { title: 'Connect', text: 'Lay canals and railways to link your industries to markets.' },
-  { title: 'Industrialize', text: 'Sell goods, grow your income and outscore your rivals in prestige.' },
-]
-
-/** Placeholder rules overview. */
+/** The rules. Numbers come from game/rules.ts so this never drifts from the engine. */
 export function HowToPlayModal({ open, onClose }: InfoModalProps) {
   return (
     <ModalFrame open={open} onClose={onClose} id="how-to-play" title="How to Play" icon={<IconBook />}>
-      <ol className="flex flex-col gap-4">
-        {HOW_TO_PLAY_STEPS.map((step, index) => (
-          <li key={step.title} className="flex gap-4">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full border border-bronze-400/50 bg-soot-800 font-display text-xl font-bold text-bronze-300">
-              {index + 1}
-            </span>
-            <div>
-              <p className="font-display text-lg font-bold tracking-[0.1em] text-parchment-50 uppercase">{step.title}</p>
-              <p className="text-parchment-300">{step.text}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-6 rounded-lg border border-dashed border-bronze-500/30 bg-soot-950/50 px-4 py-3 text-sm text-parchment-300">
-        The full rulebook and an interactive tutorial are coming soon.
-      </p>
+      <div className="flex flex-col gap-6 text-sm leading-relaxed text-parchment-200">
+        <Section title="Goal">
+          <p>
+            Earn the most <strong className="text-brass-300">prestige ★</strong> by the end of the last round. You get
+            it by building industries and links, and above all by shipping goods from your mills to market towns.
+          </p>
+        </Section>
+
+        <Section title={`Your turn: ${RULES.actionsPerTurn} actions`}>
+          <ul className="flex flex-col gap-2.5">
+            <Rule name="Build an industry">
+              In a town in your network. Your very first build can go anywhere. Each plot shows what it allows.
+            </Rule>
+            <Rule name="Build a link">
+              A canal ({formatCost(LINK_COST.canal)}) or railway ({formatCost(LINK_COST.rail)}) on a route touching your
+              network. +{RULES.linkPrestige}★.
+            </Rule>
+            <Rule name="Ship goods">
+              Send all goods from one mill to a market town over built links, anyone’s. Each goods sells at the market’s
+              price, which drops £{RULES.priceDropPerGoods} per goods sold. +1★ per goods, doubled when the goods travel{' '}
+              {RULES.longHaulLinks} or more links. Using an opponent’s link costs a £{RULES.toll} toll, paid to them.
+            </Rule>
+            <Rule name="Raise funds">Take £{RULES.raiseFunds}.</Rule>
+          </ul>
+          <p className="mt-3 text-parchment-300">
+            Your <strong className="text-parchment-100">network</strong> is every town where you own an industry or that
+            one of your links touches. Missing coal or iron is bought automatically (£{RULES.coalPrice} coal, £
+            {RULES.ironPrice} iron).
+          </p>
+        </Section>
+
+        <Section title="Industries">
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {INDUSTRY_ORDER.map((kind) => {
+              const def = INDUSTRIES[kind]
+              return (
+                <li key={kind} className="flex gap-3 rounded-lg border border-bronze-500/25 bg-soot-950/50 p-2.5">
+                  <IndustryIcon kind={kind} className="mt-0.5 size-6 shrink-0 text-bronze-300" />
+                  <div>
+                    <p className="font-display font-bold tracking-wide text-parchment-50 uppercase">
+                      {def.name} <span className="text-brass-300">+{def.prestige}★</span>
+                    </p>
+                    <p className="text-xs text-parchment-300">
+                      {formatCost(def.cost)} · {def.output}
+                    </p>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </Section>
+
+        <Section title="End of each round">
+          <p>
+            Industries produce, everyone collects £{RULES.baseIncome}, and market prices recover by £1. You can store up
+            to {RULES.storeCap} coal and {RULES.storeCap} iron; extra output is sold for £{RULES.coalOverflowValue} per
+            coal and £{RULES.ironOverflowValue} per iron.
+          </p>
+        </Section>
+
+        <Section title="End of the match">
+          <p>
+            After the last round, add +1★ per £{RULES.moneyPerPrestige} you have and +{RULES.marketBonus}★ for each
+            market town in your network. Highest total wins; ties go to the richer player.
+          </p>
+        </Section>
+
+        <p className="rounded-lg border border-dashed border-bronze-500/30 bg-soot-950/50 px-4 py-3 text-parchment-300">
+          Modes change the board size, the number of rounds and the move timer. Turn the timer off in Settings to play
+          at your own pace.
+        </p>
+      </div>
     </ModalFrame>
   )
 }
 
-/** Placeholder credits. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h3 className="eyebrow mb-2 flex items-center gap-3">
+        {title}
+        <span className="h-px flex-1 bg-linear-to-r from-bronze-500/40 to-transparent" />
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function Rule({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <li>
+      <span className="font-display font-bold tracking-wide text-parchment-50 uppercase">{name}.</span> {children}
+    </li>
+  )
+}
+
+/** Credits. */
 export function CreditsModal({ open, onClose }: InfoModalProps) {
   return (
     <ModalFrame open={open} onClose={onClose} id="credits" title="Credits" icon={<IconStar />}>

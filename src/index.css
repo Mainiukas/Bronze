@@ -108,6 +108,15 @@
   }
 }
 
+/* Player seat colors. `static` makes Tailwind always emit these variables:
+   the board reads them with var(--color-seat-N), not through utility classes. */
+@theme static {
+  --color-seat-1: #f2a65a;
+  --color-seat-2: #5fbfb2;
+  --color-seat-3: #9db7ea;
+  --color-seat-4: #e8786a;
+}
+
 /* ==========================================================================
    BASE
    ========================================================================== */
@@ -440,6 +449,55 @@ dialog.bz-dialog--drawer-left {
   to {
     transform: scale(2.6);
     opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   GAME BOARD
+   ========================================================================== */
+
+/* Targets you can click pulse gently. */
+.board-target {
+  animation: board-target 1.6s ease-in-out infinite;
+}
+
+@keyframes board-target {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Goods travelling along the route they were shipped on. */
+.board-flow {
+  stroke-dasharray: 1.2 2.4;
+  animation: board-flow 0.9s linear infinite;
+}
+
+@keyframes board-flow {
+  to {
+    stroke-dashoffset: -3.6;
+  }
+}
+
+/* Whatever was just built flashes once. */
+.board-flash {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: board-flash 1.2s ease-out both;
+}
+
+@keyframes board-flash {
+  from {
+    opacity: 1;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.2);
   }
 }
 

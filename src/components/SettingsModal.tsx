@@ -74,7 +74,7 @@ export function SettingsModal({ open, onClose, settings, onChange }: SettingsMod
           <Toggle
             id="move-timer"
             label="Show move timer"
-            description="Display the countdown for each turn."
+            description="Each turn has a time limit; when it runs out, the turn ends. Off: play untimed."
             checked={settings.showMoveTimer}
             onChange={(checked) => update('showMoveTimer', checked)}
           />

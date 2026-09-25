@@ -4,13 +4,18 @@ import { ModeCard } from '../components/ModeCard'
 import { PlayButton } from '../components/PlayButton'
 import { formatDuration, GAME_MODES, getGameMode, type GameModeId } from '../data/gameModes'
 import { formatPlayers, getMap, MAPS, type MapId } from '../data/maps'
-import { useToast } from '../hooks/useToast'
 
 interface MainMenuProps {
   modeId: GameModeId
   onModeChange: (id: GameModeId) => void
   mapId: MapId
   onMapChange: (id: MapId) => void
+  /** Opens match setup. */
+  onPlay: () => void
+  /** A match in progress that can be resumed, if any. */
+  savedMatch: { summary: string } | null
+  onResume: () => void
+  onAbandon: () => void
 }
 
 /**
@@ -20,14 +25,9 @@ interface MainMenuProps {
  * Desktop: hero + PLAY on the left (sticky), selectors on the right.
  * Mobile: stacked, with PLAY pinned to the bottom of the screen.
  */
-export function MainMenu({ modeId, onModeChange, mapId, onMapChange }: MainMenuProps) {
-  const notify = useToast()
+export function MainMenu({ modeId, onModeChange, mapId, onMapChange, onPlay, savedMatch, onResume, onAbandon }: MainMenuProps) {
   const mode = getGameMode(modeId)
   const map = getMap(mapId)
-
-  const handlePlay = () => {
-    notify(`Starting ${mode.name} on ${map.name} — gameplay coming soon`)
-  }
 
   return (
     <div className="mx-auto grid max-w-7xl gap-10 px-4 pt-8 pb-40 sm:px-6 lg:grid-cols-12 lg:gap-x-10 lg:pt-14 lg:pb-16">
@@ -45,6 +45,24 @@ export function MainMenu({ modeId, onModeChange, mapId, onMapChange }: MainMenuP
           <span aria-hidden="true" className="hidden h-px w-8 bg-linear-to-l from-transparent to-bronze-400 sm:block" />
         </p>
 
+        {/* Match in progress */}
+        {savedMatch && (
+          <div className="plate rivets mt-8 flex w-full animate-fade-up flex-col gap-3 border-brass-300/40 px-5 py-4 text-left sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow">Match in progress</p>
+              <p className="mt-0.5 font-display text-lg font-semibold tracking-wide text-parchment-50">{savedMatch.summary}</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" className="btn btn-ghost px-3" onClick={onAbandon}>
+                Abandon
+              </button>
+              <button type="button" className="btn btn-primary px-5" onClick={onResume}>
+                Resume
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Current selection (desktop only; on mobile the PLAY button shows it) */}
         <dl className="plate rivets mt-10 hidden w-full animate-fade-up grid-cols-[auto_1fr] gap-x-6 gap-y-3 px-6 py-5 text-left lg:grid">
           <SummaryRow label="Mode">
@@ -53,13 +71,15 @@ export function MainMenu({ modeId, onModeChange, mapId, onMapChange }: MainMenuP
           <SummaryRow label="Map">
             {map.name} <span className="text-parchment-400">· {formatPlayers(map.players)}</span>
           </SummaryRow>
-          <SummaryRow label="Turn timer">{mode.turnTimerSeconds}s per turn</SummaryRow>
+          <SummaryRow label="Rounds">
+            {mode.rounds} <span className="text-parchment-400">· {mode.turnTimerSeconds}s per turn</span>
+          </SummaryRow>
         </dl>
 
         {/* PLAY: pinned to the bottom on mobile, inline on desktop */}
         <div className="fixed inset-x-0 bottom-0 z-20 bg-linear-to-t from-soot-950 via-soot-950/90 to-transparent px-4 pt-8 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 lg:static lg:mt-6 lg:w-full lg:bg-none lg:p-0">
           <div className="mx-auto max-w-md animate-fade-up lg:max-w-none">
-            <PlayButton onClick={handlePlay} subtitle={`${mode.name} · ${map.name}`} />
+            <PlayButton onClick={onPlay} subtitle={`${mode.name} · ${map.name}`} />
           </div>
         </div>
       </section>

@@ -44,6 +44,14 @@ export function IconCheck(props: IconProps) {
   )
 }
 
+export function IconArrowLeft(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </Svg>
+  )
+}
+
 export function IconChevronDown(props: IconProps) {
   return (
     <Svg {...props}>
