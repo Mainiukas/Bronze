@@ -15,11 +15,24 @@ npm run dev        # http://localhost:5173
 
 Other scripts:
 
-| Command           | What it does                         |
-| ----------------- | ------------------------------------ |
-| `npm run build`   | Type-check (`tsc -b`) and build to `dist/` |
-| `npm run preview` | Serve the production build           |
-| `npm run lint`    | Lint with oxlint                     |
+| Command                | What it does                                              |
+| ---------------------- | --------------------------------------------------------- |
+| `npm run build`        | Type-check (`tsc -b`) and build to `dist/`                |
+| `npm run build:single` | Type-check and build one self-contained `dist-single/index.html` (JS, CSS and fonts inlined) |
+| `npm run preview`      | Serve the production build                                |
+| `npm run lint`         | Lint with oxlint                                          |
+
+## Putting it on the web
+
+The build is a static site, so any static host works with no server setup:
+
+- Routing uses hash URLs (`#/shop`), so no rewrite rules are needed.
+- Asset paths are relative (`base: './'`), so it works from a sub-path such as
+  `https://<user>.github.io/Bronze/`.
+
+Upload the contents of `dist/` to GitHub Pages, Netlify, Cloudflare Pages, an
+S3 bucket or similar. For hosts or embeds that take a single file, use
+`dist-single/index.html`. It also opens straight from disk.
 
 ## Project structure
 

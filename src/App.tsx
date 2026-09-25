@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
+import { HashRouter, Navigate, Route, Routes } from 'react-router'
 import { FriendsPanel } from './components/FriendsPanel'
 import { CreditsModal, HowToPlayModal } from './components/InfoModals'
 import type { MenuAction } from './components/MoreMenu'
@@ -24,12 +24,14 @@ import { Tournaments } from './pages/Tournaments'
 type Overlay = 'friends' | 'settings' | 'how-to-play' | 'credits'
 
 export default function App() {
+  // Hash-based URLs (e.g. #/shop) work on any static host without
+  // server-side rewrites, and inside embedded or file:// pages.
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ToastProvider>
         <AppShell />
       </ToastProvider>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 

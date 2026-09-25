@@ -15,7 +15,7 @@ interface TopBarProps {
  */
 export function TopBar({ onOpenFriends, onMenuAction }: TopBarProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-bronze-500/20 bg-soot-950/75 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.9)] backdrop-blur-md">
+    <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 border-b border-bronze-500/20 bg-soot-950/75 shadow-[0_10px_30px_-12px_rgb(0_0_0/0.9)] backdrop-blur-md">
       {/* Thin brass trim along the bottom edge */}
       <div
         aria-hidden="true"
