@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   settings: 'bronze.settings',
   match: 'bronze.match',
   stats: 'bronze.stats',
+  /** Unsaved calibration from the map board editor. */
+  boardDraft: 'bronze.boardDraft',
 } as const
 
 /** Read and JSON-parse a value. Returns undefined if absent or unreadable. */

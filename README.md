@@ -55,6 +55,31 @@ Upload the contents of `dist/` to GitHub Pages, Netlify, Cloudflare Pages, an
 S3 bucket or similar. For hosts or embeds that take a single file, use
 `dist-single/index.html`. It also opens straight from disk.
 
+## Map board
+
+`#/board` (☰ → Map board) shows the illustrated board: `assets/map.png` with an
+SVG overlay drawn from `src/data/board.json`: routes, link markers, city
+banners, industry slots, stops and trade hubs. It is a pure view
+(`src/components/board/IllustratedBoard.tsx`): the era, what's built and the
+selection come in as props, and clicks come out through `onSelectLocation`,
+`onSelectSlot` and `onSelectLink`. The page adds an era toggle and a sandbox
+for placing tiles. It isn't connected to the match rules yet.
+
+Coordinates in `board.json` are percentages of the image (0–100), so the
+overlay stays aligned at any size. Each link has an optional `curve`: how far
+its control point sits to the side of the straight line, in % (0 = straight).
+
+**Calibrating positions** (edit mode):
+
+1. Open `#/board?edit=1`. In `npm run dev` you can also press **E** on the page.
+2. Drag a location (its banner, slots or crosshair) to move it. Drag the dot on
+   a link to bend it. Arrow keys nudge the last one by 0.1 % (Shift: 1 %).
+3. Click **Copy JSON** (or **Download**) and paste it over
+   `src/data/board.json`. `npm test` checks the file stays valid.
+
+Edits are kept in this browser until you press **Reset**, so a reload doesn't
+lose them.
+
 ## Project structure
 
 ```
@@ -66,6 +91,8 @@ src/
     types.ts              GameState and action types
     engine.test.ts        Rules tests and simulated matches
   App.tsx                 Router, layout, app-wide state (selection, settings, saved match, stats)
+  components/board/       Illustrated map board: IllustratedBoard (view), parts (SVG pieces),
+                          layout, geometry (curves), icons, BoardTooltip
   main.tsx                Entry point; loads the bundled fonts
   index.css               Theme tokens (colors, fonts, animations) and shared component classes
   components/
@@ -89,10 +116,12 @@ src/
     game/                 Match screen parts: GameBoard, TurnPanel, PlayersPanel,
                           GameLog, MoveTimer, ResultsDialog, industry glyphs
   pages/
-    MainMenu.tsx, Game.tsx, Achievements.tsx, Locker.tsx, Shop.tsx, Tournaments.tsx
+    MainMenu.tsx, Game.tsx, MapBoard.tsx, Achievements.tsx, Locker.tsx, Shop.tsx, Tournaments.tsx
   data/
     gameModes.ts          Game modes: rounds, starting money, board size, timer
     maps.ts               Maps: towns, building plots, routes, decoration
+    board.json            Map board data: locations, slots, links (edit via #/board?edit=1)
+    board.ts              Board types, validation, export formatting, era rules
     achievements.ts       Achievements and lifetime stats
     navigation.ts         Tab list and route paths
     settings.ts           Settings shape, defaults and validation

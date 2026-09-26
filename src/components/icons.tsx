@@ -52,6 +52,15 @@ export function IconArrowLeft(props: IconProps) {
   )
 }
 
+export function IconMap(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z" />
+      <path d="M9 4.5v13M15 6.5v13" />
+    </Svg>
+  )
+}
+
 export function IconChevronDown(props: IconProps) {
   return (
     <Svg {...props}>

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ComponentType } from 'react'
-import { IconBook, IconCog, IconLogout, IconStar, type IconProps } from './icons'
+import { IconBook, IconCog, IconLogout, IconMap, IconStar, type IconProps } from './icons'
 
-export type MenuAction = 'settings' | 'how-to-play' | 'credits' | 'logout'
+export type MenuAction = 'board' | 'settings' | 'how-to-play' | 'credits' | 'logout'
 
 interface MenuItem {
   action: MenuAction
@@ -11,6 +11,7 @@ interface MenuItem {
 }
 
 const ITEMS: MenuItem[] = [
+  { action: 'board', label: 'Map board', Icon: IconMap },
   { action: 'settings', label: 'Settings', Icon: IconCog },
   { action: 'how-to-play', label: 'How to Play', Icon: IconBook },
   { action: 'credits', label: 'Credits', Icon: IconStar },

@@ -10,6 +10,8 @@ export const PATHS = {
   tournaments: '/tournaments',
   /** The match screen (not a tab). */
   play: '/play',
+  /** The illustrated map board and its calibration editor (from the ☰ menu). */
+  board: '/board',
 } as const
 
 export interface NavTab {

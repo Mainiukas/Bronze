@@ -23,6 +23,7 @@ import { Achievements } from './pages/Achievements'
 import { Game } from './pages/Game'
 import { Locker } from './pages/Locker'
 import { MainMenu } from './pages/MainMenu'
+import { MapBoard } from './pages/MapBoard'
 import { Shop } from './pages/Shop'
 import { Tournaments } from './pages/Tournaments'
 
@@ -67,6 +68,10 @@ function AppShell() {
   const handleMenuAction = (action: MenuAction) => {
     if (action === 'logout') {
       notify('Accounts are coming soon — nothing to log out of yet')
+      return
+    }
+    if (action === 'board') {
+      navigate(PATHS.board)
       return
     }
     setOverlay(action)
@@ -154,6 +159,7 @@ function AppShell() {
           <Route path={PATHS.shop} element={<Shop />} />
           <Route path={PATHS.achievements} element={<Achievements stats={stats} />} />
           <Route path={PATHS.tournaments} element={<Tournaments />} />
+          <Route path={PATHS.board} element={<MapBoard />} />
           <Route path="*" element={<Navigate to={PATHS.mainMenu} replace />} />
         </Route>
       </Routes>
