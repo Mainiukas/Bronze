@@ -117,20 +117,17 @@
   --color-seat-4: #e8786a;
 
   /* Illustrated map board (src/components/board): Victorian board-game palette.
-     Region banner colours live in src/data/board.json. */
+     The board draws with BOARD_COLORS in parts.tsx; these tokens are for the UI
+     around it. Region plate colours live in src/data/board.json. */
   --font-board: 'Cinzel', 'Times New Roman', serif;
-  --color-board-sleeper: #2a2118;
   --color-board-rail: #c2b494;
-  --color-board-bed: #3b2f22;
-  --color-board-bank: #d9d2b8;
   --color-board-water: #5f8f8c;
-  --color-board-marker: #2b2b2b;
   --color-board-bronze: #a07a3c;
-  --color-board-slot: #1e1e1e;
   --color-board-ink: #efe6cf;
   --color-board-outline: #1a130d;
-  --color-board-stop: #3a4447;
-  --color-board-hub: #6b6b66;
+  --color-board-plaque: #cfcfca;
+  --color-board-plaque-edge: #8a8a85;
+  --color-board-iron: #2b2b2b;
   --color-board-glow: #ffb45e;
 }
 

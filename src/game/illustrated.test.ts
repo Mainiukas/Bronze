@@ -15,7 +15,7 @@ import {
 import { RULES } from './rules'
 import type { GameState, SeatSetup } from './types'
 
-/** Rules specific to the painted board: eras, stops, hubs, ports, shipyards. */
+/** Rules specific to the painted board: eras, stops, hubs, ports, rail-era towns. */
 
 const seats = (n: number): SeatSetup[] => Array.from({ length: n }, (_, i) => ({ name: `P${i + 1}`, isAI: false }))
 const newGame = (players = 2, modeId: 'normal' | 'blitz' | 'bullet' = 'normal') =>
@@ -31,7 +31,7 @@ function skipTo(game: GameState, round: number): GameState {
 describe('board sizes', () => {
   it('uses more of the map in longer modes', () => {
     expect(boardFor('wales-and-the-west', 'compact').towns).toHaveLength(13)
-    expect(boardFor('wales-and-the-west', 'reduced').towns).toHaveLength(18)
+    expect(boardFor('wales-and-the-west', 'reduced').towns).toHaveLength(20)
     expect(boardFor('wales-and-the-west', 'full').towns).toHaveLength(25)
   })
 
@@ -41,7 +41,8 @@ describe('board sizes', () => {
     expect(brecon.kind).toBe('stop')
     expect(brecon.slots).toEqual([])
     const london = board.towns.find((t) => t.id === 'london')!
-    expect(london.market).toEqual({ price: 7, buys: ['manufacturer', 'pottery'] })
+    expect(london.market).toEqual({ price: 7, buys: ['cotton', 'coal', 'iron', 'port', 'shipyard'] })
+    expect(board.towns.filter((t) => t.kind === 'stop').map((t) => t.id)).toEqual(['brecon', 'lichfield', 'reading', 'taunton'])
   })
 })
 
@@ -90,24 +91,29 @@ describe('eras', () => {
 describe('stops and hubs', () => {
   it('lets links reach through stops', () => {
     let g = newGame()
-    g = applyAction(g, { type: 'link', routeId: 'stoke-lichfield' })
+    g = applyAction(g, { type: 'link', routeId: 'lichfield-stoke' })
     expect(networkTowns(g, 0).has('lichfield')).toBe(true)
     expect(buildTargets(g, 'coal').some((p) => p.townId === 'lichfield')).toBe(false)
   })
 
-  it('sells only the goods a hub buys, and scores hubs in your network', () => {
+  it('sells at the hubs that buy the goods, and scores hubs in your network', () => {
     const g = newGame()
     g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'birmingham', slot: 2, goods: 2 })
     g.links['lichfield-birmingham'] = { owner: 0, kind: 'canal' }
-    g.links['stoke-lichfield'] = { owner: 1, kind: 'canal' }
+    g.links['lichfield-stoke'] = { owner: 1, kind: 'canal' }
     g.links['the_north-stoke'] = { owner: 0, kind: 'canal' }
     g.links['birmingham-oxford'] = { owner: 0, kind: 'canal' }
-    g.links['oxford-reading'] = { owner: 0, kind: 'canal' }
-    g.links['reading-london'] = { owner: 0, kind: 'canal' }
+    g.links['reading-oxford'] = { owner: 0, kind: 'canal' }
+    g.links['london-reading'] = { owner: 0, kind: 'canal' }
     const quotes = shipQuotes(g, 900)
-    // London is connected but doesn't buy cotton.
-    expect(quotes.map((q) => q.marketId)).toEqual(['the_north'])
-    const [q] = quotes
+    expect(quotes.map((q) => q.marketId).sort()).toEqual(['london', 'the_north'])
+    const london = quotes.find((option) => option.marketId === 'london')!
+    expect([london.revenue, london.tollTotal]).toEqual([7 + 6, 0])
+    // A hub that doesn't list cotton won't take it.
+    const picky = structuredClone(g)
+    picky.board.towns.find((t) => t.id === 'london')!.market!.buys = ['coal']
+    expect(shipQuotes(picky, 900).map((option) => option.marketId)).toEqual(['the_north'])
+    const q = quotes.find((option) => option.marketId === 'the_north')!
     expect(q.revenue).toBe(6 + 5)
     expect(q.tollTotal).toBe(RULES.toll)
     expect(q.prestige).toBe(2 * 2)
@@ -152,13 +158,16 @@ describe('ports and shipyards', () => {
     expect(next.players[0].money).toBe(g.players[0].money + RULES.baseIncome + 1)
   })
 
-  it('needs a port in town before a shipyard', () => {
-    let g = newGame()
+  it('opens rail-era towns (and the shipyard) only in the rail era', () => {
+    const g = newGame()
     expect(buildTargets(g, 'shipyard')).toEqual([])
-    g = applyAction(g, { type: 'build', kind: 'port', townId: 'bristol', slot: 0 })
-    g = applyAction(g, { type: 'raiseFunds' })
-    // Player 2 (empty network) can now build the shipyard in Bristol.
-    expect(buildTargets(g, 'shipyard')).toEqual([{ townId: 'bristol', slot: 1 }])
-    expect(() => applyAction(g, { type: 'build', kind: 'shipyard', townId: 'southampton', slot: 1 })).toThrow(/needs a Port/)
+    expect(buildTargets(g, 'iron').some((p) => p.townId === 'plymouth')).toBe(false)
+    expect(() => applyAction(g, { type: 'build', kind: 'shipyard', townId: 'plymouth', slot: 1 })).toThrow(/opens in the rail era/)
+    // In the rail era a player with no network yet can start there; no port is needed.
+    const rail = skipTo(g, 6)
+    expect(buildTargets(rail, 'shipyard')).toEqual([{ townId: 'plymouth', slot: 1 }])
+    rail.players[rail.turnOrder[rail.turnIndex]].money = 40
+    const built = applyAction(rail, { type: 'build', kind: 'shipyard', townId: 'plymouth', slot: 1 })
+    expect(built.buildings.at(-1)).toMatchObject({ kind: 'shipyard', townId: 'plymouth' })
   })
 })

@@ -8,7 +8,6 @@ import {
   linkCost,
   linkKindNow,
   linkTargets,
-  networkTowns,
   quote,
   shipQuotes,
   shipSources,
@@ -39,10 +38,11 @@ interface TurnPanelProps {
   onShowResults: () => void
 }
 
-/** Does the player's network include a town with this industry (anyone's)? */
-function hasNeededIndustry(game: GameState, kind: IndustryKind): boolean {
-  const network = networkTowns(game, currentPlayer(game).id)
-  return game.buildings.some((b) => b.kind === kind && (network.size === 0 || network.has(b.townId)))
+/** During the canal era: is this industry only offered in towns that open in the rail era? */
+function waitsForRailEra(game: GameState, kind: IndustryKind): boolean {
+  if (game.era !== 'canal') return false
+  const towns = game.board.towns.filter((town) => town.slots.some((allowed) => allowed.includes(kind)))
+  return towns.length > 0 && towns.every((town) => town.railOnly)
 }
 
 /** "£11 (buys 1 iron)" */
@@ -255,8 +255,8 @@ function BuildPicker({ game, kind, onUiChange, onAction }: PickerProps & { kind:
                 ? affordable
                   ? null
                   : `Needs £${q.total}`
-                : def.needsInTown && !hasNeededIndustry(game, def.needsInTown)
-                  ? `Needs a ${INDUSTRIES[def.needsInTown].name} in the same town`
+                : waitsForRailEra(game, option)
+                  ? 'Opens in the rail era'
                   : 'No free plot in your network'
             return (
               <button

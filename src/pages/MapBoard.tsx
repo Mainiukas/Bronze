@@ -21,15 +21,15 @@ import { STORAGE_KEYS } from '../lib/storage'
 /** A few tiles so the board opens showing what built slots and links look like. */
 const SAMPLE_BUILT: BuiltState = {
   slots: {
-    [slotKey('birmingham', 0)]: { player: 0, industry: 'manufacturer' },
+    [slotKey('birmingham', 0)]: { player: 0, industry: 'cotton', goods: 2 },
     [slotKey('merthyr', 0)]: { player: 1, industry: 'iron' },
     [slotKey('bristol', 0)]: { player: 2, industry: 'port' },
-    [slotKey('stoke', 0)]: { player: 3, industry: 'pottery' },
+    [slotKey('stoke', 0)]: { player: 3, industry: 'coal' },
   },
   links: {
-    'birmingham-oxford': { player: 0 },
-    'carmarthen-merthyr': { player: 1 },
-    'gloucester-bristol': { player: 2 },
+    'birmingham-oxford': { player: 0, kind: 'canal' },
+    'carmarthen-merthyr': { player: 1, kind: 'canal' },
+    'gloucester-bristol': { player: 2, kind: 'rail' },
   },
 }
 
@@ -98,10 +98,12 @@ export function MapBoard() {
   }
 
   const placeOnLink = (linkId: string) => {
+    const link = board.links.find((l) => l.id === linkId)
+    if (!link) return
     setBuilt((prev) => {
       const links = { ...prev.links }
       if (links[linkId]?.player === player) delete links[linkId]
-      else links[linkId] = { player }
+      else links[linkId] = { player, kind: link.type === 'both' ? era : link.type }
       return { ...prev, links }
     })
   }
@@ -171,7 +173,8 @@ export function MapBoard() {
             ))}
           </div>
           <p className="text-xs text-parchment-400">
-            {era === 'canal' ? 'Rail-only links' : 'Canal-only links'} are faded and can’t be used. Links drawn with both tracks work in either era.
+            {era === 'canal' ? 'Rail-only links' : 'Canal-only links'} are faded and can’t be used. Links drawn with both tracks work in
+            either era. Plymouth and Taunton open in the rail era.
           </p>
         </Panel>
 
@@ -236,11 +239,11 @@ export function MapBoard() {
               </li>
             ))}
             <li className="flex items-center gap-2 text-parchment-200">
-              <span className="h-3 w-6 rounded-sm border border-black/40 bg-board-stop" />
-              Stop (no building)
+              <span className="h-3 w-6 rounded-sm border border-board-plaque-edge bg-board-plaque" />
+              Stop (no building or trade)
             </li>
             <li className="flex items-center gap-2 text-parchment-200">
-              <span className="h-3 w-6 rounded-sm border border-board-bronze bg-board-hub" />
+              <span className="size-3.5 rounded-full border-[3px] border-board-iron bg-board-plaque ring-1 ring-board-bronze" />
               Trade hub
             </li>
           </ul>
@@ -276,8 +279,11 @@ function SelectionDetails({ board, era, built, selected }: { board: BoardData; e
           {link.type === 'both' ? 'Canal and rail' : link.type === 'canal' ? 'Canal only' : 'Rail only'} ·{' '}
           {isLinkActive(link.type, era) ? `usable in the ${era} era` : `closed in the ${era} era`}
         </p>
-        <p className="mt-1">{owner ? `Built by ${PLAYER_NAMES[owner.player]}` : 'Not built'}</p>
-        <p className="mt-1 font-mono text-xs text-parchment-500">id {link.id}</p>
+        <p className="mt-1">{owner ? `Built by ${PLAYER_NAMES[owner.player]} (${owner.kind ?? era})` : 'Not built'}</p>
+        <p className="mt-1 font-mono text-xs text-parchment-500">
+          id {link.id}
+          {link.points?.length ? ` · ${link.points.length} bend point${link.points.length === 1 ? '' : 's'}` : ' · automatic bend'}
+        </p>
       </div>
     )
   }
@@ -291,7 +297,9 @@ function SelectionDetails({ board, era, built, selected }: { board: BoardData; e
       <p className="text-parchment-400">
         {location.type === 'city' ? `City · ${board.regions[location.region]?.name}` : location.type === 'stop' ? 'Stop' : 'Trade hub'} · x{' '}
         {location.x}% · y {location.y}%
+        {location.labelOffset ? ` · plaque offset ${location.labelOffset.x}%, ${location.labelOffset.y}%` : ''}
       </p>
+      {location.era === 'rail' && <p className="text-brass-200">Available in the Rail Era</p>}
       {location.type === 'city' && (
         <ol className="flex flex-col gap-0.5">
           {location.slots.map((allowed, i) => {
@@ -306,9 +314,15 @@ function SelectionDetails({ board, era, built, selected }: { board: BoardData; e
         </ol>
       )}
       {location.type === 'hub' && <p>Buys {location.buys.map((b) => GOODS_NAMES[b]).join(', ')}</p>}
-      <p className="text-parchment-400">
-        Links: {board.links.filter((l) => l.from === location.id || l.to === location.id).map((l) => name(l.from === location.id ? l.to : l.from)).join(', ')}
-      </p>
+      <ul className="text-parchment-400">
+        {board.links
+          .filter((l) => l.from === location.id || l.to === location.id)
+          .map((l) => (
+            <li key={l.id}>
+              {name(l.from === location.id ? l.to : l.from)} · {l.type === 'both' ? 'canal and rail' : `${l.type} only`}
+            </li>
+          ))}
+      </ul>
     </div>
   )
 }
@@ -328,16 +342,22 @@ function EditorPanel({
   const json = formatBoardJson(board)
   const textRef = useRef<HTMLTextAreaElement>(null)
   const [showJson, setShowJson] = useState(false)
-  const moved = board.locations.filter((l) => {
-    const original = BOARD.locations.find((o) => o.id === l.id)
-    return original && (original.x !== l.x || original.y !== l.y)
-  }).length
-  const bent = board.links.filter((l) => (BOARD.links.find((o) => o.id === l.id)?.curve ?? 0) !== (l.curve ?? 0)).length
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+  const original = (id: string) => BOARD.locations.find((o) => o.id === id)
+  const moved = board.locations.filter((l) => original(l.id) && (original(l.id)!.x !== l.x || original(l.id)!.y !== l.y)).length
+  const placed = board.locations.filter((l) => !same(original(l.id)?.labelOffset, l.labelOffset)).length
+  const bent = board.links.filter((l) => !same(BOARD.links.find((o) => o.id === l.id)?.points, l.points)).length
+  const changes = [
+    moved && `${moved} location${moved === 1 ? '' : 's'} moved`,
+    placed && `${placed} plaque${placed === 1 ? '' : 's'} placed`,
+    bent && `${bent} link${bent === 1 ? '' : 's'} reshaped`,
+  ].filter(Boolean)
 
-  const copy = async () => {
+  const exportJson = async () => {
+    setShowJson(true)
     try {
       await navigator.clipboard.writeText(json)
-      notify('Copied board.json to the clipboard')
+      notify('Exported: board.json is on the clipboard and shown below')
     } catch {
       // Clipboard blocked: show the JSON selected so it can be copied by hand.
       setShowJson(true)
@@ -359,18 +379,19 @@ function EditorPanel({
     <section className="plate rivets flex flex-col gap-3 border-brass-300/50 p-4">
       <h2 className="eyebrow">Edit map</h2>
       <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-parchment-300">
-        <li>Drag a location (banner, slots or crosshair) to move it.</li>
-        <li>Drag a link’s dot to bend the link.</li>
-        <li>Arrow keys nudge the last one by 0.1 (Shift: 1).</li>
+        <li>Drag a crosshair to move a location.</li>
+        <li>Drag a plaque or tile group to place it by hand; double-click it to go back to automatic.</li>
+        <li>Drag a “+” on a link to add a bend point (up to 3); drag squares to move them, double-click to remove.</li>
+        <li>Arrow keys nudge the last one by 0.1 % (Shift: 1 %).</li>
         <li>Press E or “Done editing” to preview.</li>
       </ul>
       <p className="text-sm text-parchment-200">
-        {moved || bent ? `${moved} location${moved === 1 ? '' : 's'} moved, ${bent} link${bent === 1 ? '' : 's'} bent.` : 'No changes yet.'}{' '}
+        {changes.length ? `${changes.join(', ')}.` : 'No changes yet.'}{' '}
         <span className="text-parchment-400">Saved in this browser until you reset.</span>
       </p>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" className="btn btn-primary" onClick={copy}>
-          Copy JSON
+        <button type="button" className="btn btn-primary" onClick={exportJson}>
+          Export
         </button>
         <button type="button" className="btn btn-ghost" onClick={download}>
           Download

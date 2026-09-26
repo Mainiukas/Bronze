@@ -76,14 +76,19 @@ export function HowToPlayModal({ open, onClose }: InfoModalProps) {
               whichever the era allows. Links already built keep carrying goods.
             </Rule>
             <Rule name="Trade hubs">
-              The North, London and West Wales buy only the goods shown on their plaques, at the price in the corner.
-              They can’t be built in, but links to them count toward your network.
+              The North, London and West Wales are where cotton is sold, at the price on their tag; it drops as goods are
+              sold. The icons under each ribbon show what the hub trades in. Hubs can’t be built in, but links to them
+              count toward your network.
             </Rule>
             <Rule name="Ports">
               Buy any goods for a flat £{RULES.portPrice}. If you sell at someone else’s port, they get £{RULES.portFee} per
-              goods. A shipyard needs a port in the same town.
+              goods.
             </Rule>
-            <Rule name="Stops">Brecon, Lichfield and Taunton carry routes but have no building plots.</Rule>
+            <Rule name="Stops">Brecon, Lichfield, Reading and Taunton carry routes but have no building plots.</Rule>
+            <Rule name="Rail-era towns">
+              Plymouth and Taunton (marked with a locomotive) open in the rail era: no canal reaches them and nothing can be
+              built there before it. Plymouth has the map’s only shipyard.
+            </Rule>
             <Rule name="Smaller modes">Blitz and Bullet close the outer towns; they’re drawn faded.</Rule>
           </ul>
         </Section>

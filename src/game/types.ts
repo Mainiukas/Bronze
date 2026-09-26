@@ -2,9 +2,9 @@ import type { GameModeId } from '../data/gameModes'
 import type { MapId } from '../data/maps'
 
 /** Bump when GameState's shape changes, so old saves are discarded. */
-export const GAME_VERSION = 2
+export const GAME_VERSION = 3
 
-export type IndustryKind = 'coal' | 'iron' | 'cotton' | 'manufacturer' | 'pottery' | 'port' | 'shipyard' | 'works'
+export type IndustryKind = 'coal' | 'iron' | 'cotton' | 'port' | 'shipyard' | 'works'
 export type RouteKind = 'canal' | 'rail'
 export type Era = 'canal' | 'rail'
 
@@ -26,6 +26,8 @@ export interface BoardTown {
   market: Market | null
   /** One entry per building plot: the industries allowed on it. */
   slots: IndustryKind[][]
+  /** Opens in the rail era: nothing can be built here during the canal era. */
+  railOnly?: boolean
 }
 
 export interface BoardRoute {

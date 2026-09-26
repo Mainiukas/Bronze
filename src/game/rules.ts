@@ -71,8 +71,6 @@ export interface IndustryDef {
   yields: 'coal' | 'iron' | 'goods' | 'money' | 'prestige'
   /** Ports: a market for any goods. */
   market?: boolean
-  /** Must share a town with this industry (anyone's). */
-  needsInTown?: IndustryKind
   /** Short description of what it does. */
   output: string
 }
@@ -103,24 +101,6 @@ export const INDUSTRIES: Record<IndustryKind, IndustryDef> = {
     yields: 'goods',
     output: '+1 cotton each round (holds 3)',
   },
-  manufacturer: {
-    kind: 'manufacturer',
-    name: 'Manufacturer',
-    goodsName: 'manufactured goods',
-    cost: { money: 8, coal: 1, iron: 1 },
-    prestige: 3,
-    yields: 'goods',
-    output: '+1 manufactured goods each round (holds 3)',
-  },
-  pottery: {
-    kind: 'pottery',
-    name: 'Pottery',
-    goodsName: 'pottery',
-    cost: { money: 6, coal: 1, iron: 0 },
-    prestige: 2,
-    yields: 'goods',
-    output: '+1 pottery each round (holds 3)',
-  },
   port: {
     kind: 'port',
     name: 'Port',
@@ -136,8 +116,7 @@ export const INDUSTRIES: Record<IndustryKind, IndustryDef> = {
     cost: { money: 14, coal: 1, iron: 2 },
     prestige: 6,
     yields: 'prestige',
-    needsInTown: 'port',
-    output: '+1 prestige each round. Needs a port in the same town',
+    output: '+1 prestige each round',
   },
   works: {
     kind: 'works',
@@ -154,8 +133,6 @@ export const INDUSTRY_ORDER: readonly IndustryKind[] = [
   'coal',
   'iron',
   'cotton',
-  'manufacturer',
-  'pottery',
   'port',
   'shipyard',
   'works',

@@ -75,6 +75,7 @@ export function illustratedBoard(data: BoardData, mapSize: GameModeConfig['mapSi
       kind: location.type,
       market: location.type === 'hub' ? { price: location.price, buys: [...location.buys] } : null,
       slots: location.type === 'city' ? location.slots.map((allowed) => [...allowed]) : [],
+      railOnly: location.era === 'rail',
     }))
   const included = new Set(towns.map((town) => town.id))
   const routes: BoardRoute[] = data.links
@@ -259,11 +260,10 @@ export interface Plot {
 export function buildTargets(state: GameState, kind: IndustryKind, playerId = currentPlayerId(state)): Plot[] {
   const network = networkTowns(state, playerId)
   const anywhere = network.size === 0
-  const needs = INDUSTRIES[kind].needsInTown
   const plots: Plot[] = []
   for (const town of state.board.towns) {
     if (!anywhere && !network.has(town.id)) continue
-    if (needs && !state.buildings.some((b) => b.townId === town.id && b.kind === needs)) continue
+    if (town.railOnly && state.era === 'canal') continue
     town.slots.forEach((allowed, slot) => {
       if (allowed.includes(kind) && !buildingAt(state, town.id, slot)) plots.push({ townId: town.id, slot })
     })
@@ -517,11 +517,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
         (plot) => plot.townId === action.townId && plot.slot === action.slot,
       )
       if (!allowed) {
-        const needs = def.needsInTown
         throw new IllegalActionError(
-          needs && !s.buildings.some((b) => b.townId === town.id && b.kind === needs)
-            ? `A ${def.name} needs a ${INDUSTRIES[needs].name} in ${town.name} first`
-            : `You can't build a ${def.name} there`,
+          town.railOnly && s.era === 'canal' ? `${town.name} opens in the rail era` : `You can't build a ${def.name} there`,
         )
       }
       const q = pay(player, def.cost)

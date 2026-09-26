@@ -356,7 +356,7 @@ function Legend({ viewer, kinds, painted }: { viewer: number; kinds: IndustryKin
       </li>
       <li className="flex items-center gap-1.5">
         {painted ? (
-          <span className="h-3 w-4 rounded-sm border border-board-bronze bg-board-hub" />
+          <span className="size-3.5 rounded-full border-[3px] border-board-iron bg-board-plaque ring-1 ring-board-bronze" />
         ) : (
           <span className="size-3 rounded-full border border-brass-300 bg-soot-800 ring-1 ring-brass-300/60 ring-offset-1 ring-offset-soot-900" />
         )}
@@ -391,7 +391,7 @@ function PaintedBoard({ game, viewer, network, targets, selectedSource, onSelect
   for (const b of game.buildings) {
     built.slots[slotKey(b.townId, b.slot)] = { player: b.owner, industry: b.kind as Industry, goods: b.goods }
   }
-  for (const [id, link] of Object.entries(game.links)) built.links[id] = { player: link.owner }
+  for (const [id, link] of Object.entries(game.links)) built.links[id] = { player: link.owner, kind: link.kind }
   const source = selectedSource === null ? undefined : game.buildings.find((b) => b.id === selectedSource)
   const event = game.lastEvent
   const recent =
