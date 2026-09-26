@@ -26,7 +26,7 @@ number lives in `src/game/rules.ts`.
 
 ### Wales & the West
 
-The default map is played on the illustrated board (`assets/map.png`), with a
+The default map is played on the illustrated board (`assets/map.webp`), with a
 few extra rules:
 
 - **Eras.** The match starts in the canal era; the rail era begins half way
@@ -77,7 +77,7 @@ S3 bucket or similar. For hosts or embeds that take a single file, use
 
 ## Map board
 
-`#/board` (☰ → Map board) shows the illustrated board: `assets/map.png` with an
+`#/board` (☰ → Map board) shows the illustrated board: `assets/map.webp` with an
 SVG overlay drawn from `src/data/board.json`: routes, link markers, city
 banners, industry slots, stops and trade hubs. It is a pure view
 (`src/components/board/IllustratedBoard.tsx`): the era, what's built and the

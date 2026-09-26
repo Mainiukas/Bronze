@@ -2,7 +2,7 @@
  * Map configuration.
  *
  * Two styles of map:
- * - `illustrated`: the painted board (assets/map.png) whose towns, slots and
+ * - `illustrated`: the painted board (assets/map.webp) whose towns, slots and
  *   routes live in src/data/board.json. Canal and rail eras apply.
  * - `schematic`: drawn entirely from the `board` block below (towns,
  *   building plots, routes, decoration). MapPreview draws it in the lobby and

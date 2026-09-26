@@ -1,5 +1,5 @@
 /**
- * The illustrated board (assets/map.png): locations, industry slots and
+ * The illustrated board (assets/map.webp): locations, industry slots and
  * links, loaded from board.json and validated. Coordinates are percentages
  * of the image (0–100), so they stay aligned at any size.
  *

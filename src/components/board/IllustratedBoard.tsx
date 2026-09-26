@@ -2,7 +2,7 @@ import '@fontsource/cinzel/latin-600.css'
 import '@fontsource/cinzel/latin-700.css'
 import '@fontsource/cinzel/latin-800.css'
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
-import mapUrl from '../../../assets/map.png'
+import mapUrl from '../../../assets/map.webp'
 import {
   EMPTY_BUILT,
   INDUSTRY_NAMES,
@@ -100,7 +100,7 @@ function asButton(label: string, onActivate: () => void) {
 const pad = (r: Rect, by: number): Rect => ({ x: r.x - by, y: r.y - by, w: r.w + by * 2, h: r.h + by * 2 })
 
 /**
- * The illustrated map board: assets/map.png with an SVG overlay (viewBox
+ * The illustrated map board: assets/map.webp with an SVG overlay (viewBox
  * 0 0 1000 1000) drawn from board data. Layers, bottom to top: routes, link
  * markers, industry slots, location banners, highlights, tooltips.
  *
