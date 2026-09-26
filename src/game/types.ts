@@ -2,18 +2,28 @@ import type { GameModeId } from '../data/gameModes'
 import type { MapId } from '../data/maps'
 
 /** Bump when GameState's shape changes, so old saves are discarded. */
-export const GAME_VERSION = 1
+export const GAME_VERSION = 2
 
-export type IndustryKind = 'colliery' | 'ironworks' | 'mill' | 'works'
+export type IndustryKind = 'coal' | 'iron' | 'cotton' | 'manufacturer' | 'pottery' | 'port' | 'shipyard' | 'works'
 export type RouteKind = 'canal' | 'rail'
+export type Era = 'canal' | 'rail'
+
+/** A place that buys goods. `buys` lists the producing industries whose goods it takes. */
+export interface Market {
+  /** Starting price per goods (£). */
+  price: number
+  buys: IndustryKind[] | 'any'
+}
 
 export interface BoardTown {
   id: string
   name: string
+  /** Position on the map's own grid (only used for drawing). */
   x: number
   y: number
-  /** Starting goods price if this is a market town, otherwise null. */
-  market: number | null
+  /** Cities hold industries; stops only carry routes; hubs buy goods. */
+  kind: 'city' | 'stop' | 'hub'
+  market: Market | null
   /** One entry per building plot: the industries allowed on it. */
   slots: IndustryKind[][]
 }
@@ -22,13 +32,16 @@ export interface BoardRoute {
   id: string
   from: string
   to: string
-  kind: RouteKind
+  /** What this route can be built as. With eras, only the current era's kind can be built. */
+  kinds: RouteKind[]
 }
 
 /** The playable board: a map cut down to the chosen mode's size. */
 export interface Board {
   towns: BoardTown[]
   routes: BoardRoute[]
+  /** Canal era, then rail era. */
+  eras: boolean
 }
 
 export interface SeatSetup {
@@ -55,13 +68,20 @@ export interface Building {
   owner: number
   townId: string
   slot: number
-  /** Goods waiting to be shipped (mills only). */
+  /** Goods waiting to be shipped (goods-producing industries only). */
   goods: number
+}
+
+export interface LinkState {
+  owner: number
+  /** What it was built as. */
+  kind: RouteKind
 }
 
 export type GameAction =
   | { type: 'build'; kind: IndustryKind; townId: string; slot: number }
   | { type: 'link'; routeId: string }
+  /** `marketId` is a town id, or `port:<buildingId>` for a port. */
   | { type: 'ship'; buildingId: number; marketId: string }
   | { type: 'raiseFunds' }
   | { type: 'endTurn'; timedOut?: boolean }
@@ -70,7 +90,7 @@ export type GameAction =
 export type GameEvent =
   | { type: 'build'; player: number; townId: string; slot: number }
   | { type: 'link'; player: number; routeId: string }
-  | { type: 'ship'; player: number; fromTownId: string; marketId: string; routeIds: string[] }
+  | { type: 'ship'; player: number; fromTownId: string; marketId: string; marketTownId: string; routeIds: string[] }
   | { type: 'raiseFunds'; player: number }
   | { type: 'endTurn'; player: number }
 
@@ -100,13 +120,17 @@ export interface GameState {
   board: Board
   players: PlayerState[]
   buildings: Building[]
-  /** Built routes: route id → owner seat. */
-  links: Record<string, number>
+  /** Built routes by route id. */
+  links: Record<string, LinkState>
   /** Current goods price per market town id. */
   prices: Record<string, number>
   /** 1-based. */
   round: number
   totalRounds: number
+  /** Current era, or null on boards without eras. */
+  era: Era | null
+  /** First round of the rail era, or null on boards without eras. */
+  railEraRound: number | null
   /** Seats in play order for this round. */
   turnOrder: number[]
   turnIndex: number

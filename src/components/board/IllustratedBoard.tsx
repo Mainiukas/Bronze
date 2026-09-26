@@ -15,7 +15,7 @@ import {
 } from '../../data/board'
 import { seatColor } from '../game/glyphs'
 import { BoardTooltip } from './BoardTooltip'
-import { curveForMidpoint, curveMidpoint, linkCurve, roundPercent, toView, trimCurve, type Point } from './geometry'
+import { curveForMidpoint, curveMidpoint, curvePath, linkCurve, roundPercent, toView, trimCurve, type Point } from './geometry'
 import { boardFont, CITY_WEIGHT, HUB_FONT, HUB_WEIGHT, layoutLocation, STOP_FONT, STOP_WEIGHT, type Rect } from './layout'
 import { createTextMeasurer, useFontsReady } from './measure'
 import { BoardDefs, CityRibbon, HubPlaque, LinkMarker, RouteGlow, RouteStrokes, SlotBox, StopBanner } from './parts'
@@ -24,6 +24,28 @@ export type BoardSelection =
   | { type: 'location'; id: string }
   | { type: 'slot'; locationId: string; index: number }
   | { type: 'link'; id: string }
+
+/**
+ * Match mode: what can be clicked right now. When given, only these are
+ * interactive and they glow; labels (costs, payouts) are shown beside them.
+ * Without it (the sandbox page), every usable item is clickable.
+ */
+export interface BoardTargets {
+  /** Keyed by slotKey(locationId, index). */
+  slots?: ReadonlyMap<string, string | null>
+  links?: ReadonlyMap<string, string | null>
+  locations?: ReadonlyMap<string, string | null>
+}
+
+/** The last move, to highlight. `key` changes with every move so the flash replays. */
+export interface BoardRecent {
+  key: number
+  slot?: string
+  link?: string
+  location?: string
+  /** Links goods travelled along. */
+  path?: readonly string[]
+}
 
 export interface IllustratedBoardProps {
   board: BoardData
@@ -41,6 +63,14 @@ export interface IllustratedBoardProps {
   editable?: boolean
   /** Receives the edited board while dragging in edit mode. */
   onBoardChange?: (board: BoardData) => void
+  targets?: BoardTargets
+  /** Current hub prices, shown on their plaques. */
+  prices?: Readonly<Record<string, number>>
+  /** Locations not in play (smaller game modes): drawn faded. */
+  closed?: ReadonlySet<string>
+  /** Outline these locations in a player's colour (their network). */
+  network?: { locations: ReadonlySet<string>; color: string } | null
+  recent?: BoardRecent | null
   className?: string
 }
 
@@ -89,6 +119,11 @@ export function IllustratedBoard({
   onSelectLink,
   editable = false,
   onBoardChange,
+  targets,
+  prices,
+  closed,
+  network = null,
+  recent = null,
   className = '',
 }: IllustratedBoardProps) {
   const fontsReady = useFontsReady(FONTS)
@@ -116,10 +151,12 @@ export function IllustratedBoard({
           drawn: trimCurve(full, TRIM[a.type], TRIM[b.type]),
           mid: curveMidpoint(full),
           active: isLinkActive(link.type, era),
+          closed: (closed?.has(link.from) || closed?.has(link.to)) ?? false,
         }
       }),
-    [board.links, locations, era],
+    [board.links, locations, era, closed],
   )
+  const recentPath = new Set(recent?.path ?? [])
 
   // Links to glow: those touching the hovered or selected location, or the hovered/selected link.
   const glow = new Map<string, boolean>()
@@ -254,32 +291,49 @@ export function IllustratedBoard({
 
         {/* 1. Routes */}
         <g aria-hidden="true">
-          {routes.map(({ link, drawn, active }) => (
-            <g key={link.id} opacity={active ? 1 : 0.25}>
-              {glow.has(link.id) && <RouteGlow curve={drawn} type={link.type} strong={glow.get(link.id)!} />}
-              <RouteStrokes curve={drawn} type={link.type} />
-            </g>
-          ))}
+          {routes.map(({ link, drawn, active, closed: shut }) => {
+            // Built links stay bright whatever the era; unbuilt ones of the other era fade.
+            const opacity = shut ? 0.12 : active || built.links[link.id] ? 1 : 0.25
+            const targeted = targets?.links?.has(link.id) ?? false
+            return (
+              <g key={link.id} opacity={opacity}>
+                {(glow.has(link.id) || targeted) && (
+                  <g className={targeted ? 'board-target' : undefined}>
+                    <RouteGlow curve={drawn} type={link.type} strong={targeted || glow.get(link.id)!} />
+                  </g>
+                )}
+                <RouteStrokes curve={drawn} type={link.type} />
+                {recentPath.has(link.id) && (
+                  <path key={recent?.key} d={curvePath(drawn)} className="board-flow-lg fill-none stroke-brass-200" strokeWidth={5} strokeLinecap="round" />
+                )}
+              </g>
+            )
+          })}
         </g>
 
         {/* 2. Link markers */}
         <g>
-          {routes.map(({ link, mid, active }) => {
+          {routes.map(({ link, mid, active, closed: shut }) => {
             const owner = built.links[link.id]
             const label = `${locations.get(link.from)!.name} to ${locations.get(link.to)!.name} (${link.type === 'both' ? 'canal and rail' : link.type})`
-            const clickable = active && !editable
+            const usable = !shut && (active || owner !== undefined)
+            // In a match, targets are clicked in the top layer instead.
+            const clickable = !editable && !targets && !!onSelectLink && active && !shut
             return (
               <g
                 key={link.id}
-                opacity={active ? 1 : 0.25}
-                pointerEvents={active ? undefined : 'none'}
-                className={clickable && onSelectLink ? 'cursor-pointer' : undefined}
-                aria-disabled={active ? undefined : true}
-                {...(clickable && onSelectLink ? asButton(label, () => onSelectLink(link.id)) : {})}
-                {...(active ? hoverHandlers({ type: 'link', id: link.id }) : {})}
+                opacity={shut ? 0.12 : usable ? 1 : 0.25}
+                pointerEvents={usable ? undefined : 'none'}
+                className={clickable ? 'cursor-pointer' : undefined}
+                aria-disabled={usable ? undefined : true}
+                {...(clickable ? asButton(label, () => onSelectLink!(link.id)) : {})}
+                {...(usable ? hoverHandlers({ type: 'link', id: link.id }) : {})}
               >
                 <circle cx={mid.x} cy={mid.y} r={15} fill="transparent" />
                 <LinkMarker at={mid} fill={owner ? playerColor(owner.player) : null} />
+                {recent?.link === link.id && (
+                  <circle key={recent.key} cx={mid.x} cy={mid.y} r={12} className="board-flash fill-none stroke-brass-200" strokeWidth={3} />
+                )}
               </g>
             )
           })}
@@ -290,21 +344,25 @@ export function IllustratedBoard({
           {board.locations.map((location) => {
             if (location.type !== 'city') return null
             const layout = layouts.get(location.id)!
+            const shut = closed?.has(location.id) ?? false
             return location.slots.map((allowed, index) => {
-              const tile = built.slots[slotKey(location.id, index)]
+              const key = slotKey(location.id, index)
+              const tile = built.slots[key]
               const label = `${location.name} slot ${index + 1}: ${allowed.map((a) => INDUSTRY_NAMES[a]).join(' or ')}`
+              const clickable = !editable && !targets && !shut && !!onSelectSlot
               return (
                 <g
-                  key={`${location.id}-${index}`}
-                  className={editable ? 'cursor-grab' : onSelectSlot ? 'cursor-pointer' : undefined}
+                  key={key}
+                  opacity={shut ? 0.3 : 1}
+                  className={editable ? 'cursor-grab' : clickable ? 'cursor-pointer' : undefined}
                   onPointerDown={(e) => startLocationDrag(e, location.id)}
-                  {...hoverHandlers({ type: 'location', id: location.id, slot: index })}
-                  {...(!editable && onSelectSlot ? asButton(label, () => onSelectSlot(location.id, index)) : {})}
+                  {...(shut ? {} : hoverHandlers({ type: 'location', id: location.id, slot: index }))}
+                  {...(clickable ? asButton(label, () => onSelectSlot!(location.id, index)) : {})}
                 >
                   <SlotBox
                     rect={layout.slots[index]}
                     allowed={allowed}
-                    tile={tile ? { industry: tile.industry, color: playerColor(tile.player) } : null}
+                    tile={tile ? { industry: tile.industry, color: playerColor(tile.player), goods: tile.goods ?? 0 } : null}
                   />
                 </g>
               )
@@ -316,13 +374,16 @@ export function IllustratedBoard({
         <g>
           {board.locations.map((location) => {
             const layout = layouts.get(location.id)!
+            const shut = closed?.has(location.id) ?? false
+            const clickable = !editable && !targets && !shut && !!onSelectLocation
             return (
               <g
                 key={location.id}
-                className={editable ? 'cursor-grab' : onSelectLocation ? 'cursor-pointer' : undefined}
+                opacity={shut ? 0.35 : 1}
+                className={editable ? 'cursor-grab' : clickable ? 'cursor-pointer' : undefined}
                 onPointerDown={(e) => startLocationDrag(e, location.id)}
-                {...hoverHandlers({ type: 'location', id: location.id })}
-                {...(!editable && onSelectLocation ? asButton(location.name, () => onSelectLocation(location.id)) : {})}
+                {...(shut ? {} : hoverHandlers({ type: 'location', id: location.id }))}
+                {...(clickable ? asButton(location.name, () => onSelectLocation!(location.id)) : {})}
               >
                 <circle cx={layout.center.x} cy={layout.center.y} r={16} fill="transparent" />
                 {location.type === 'city' && (
@@ -334,14 +395,78 @@ export function IllustratedBoard({
                   />
                 )}
                 {location.type === 'stop' && <StopBanner rect={layout.label} name={location.name} fontSize={layout.fontSize} />}
-                {location.type === 'hub' && <HubPlaque layout={layout} name={location.name} buys={location.buys} />}
+                {location.type === 'hub' && (
+                  <HubPlaque layout={layout} name={location.name} buys={location.buys} price={prices?.[location.id]} />
+                )}
               </g>
             )
           })}
         </g>
 
-        {/* 5. Hover and selection highlights */}
+        {/* 5. Hover, selection and target highlights */}
         <g pointerEvents="none">
+          {network &&
+            [...network.locations].map((id) => {
+              const layout = layouts.get(id)
+              if (!layout) return null
+              return (
+                <circle
+                  key={`net-${id}`}
+                  cx={layout.center.x}
+                  cy={layout.center.y}
+                  r={11}
+                  fill="none"
+                  stroke={network.color}
+                  strokeWidth={2.5}
+                  strokeDasharray="5 4"
+                />
+              )
+            })}
+          {targets?.slots &&
+            [...targets.slots].map(([key, text]) => {
+              const [locationId, index] = key.split(':')
+              const rect = layouts.get(locationId)?.slots[Number(index)]
+              if (!rect) return null
+              const box = pad(rect, 3)
+              return (
+                <g key={`t-${key}`}>
+                  <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={4} className="board-target fill-none stroke-board-glow" strokeWidth={2.5} />
+                  {text && <TargetTag x={rect.x + rect.w / 2} y={rect.y - 12} text={text} />}
+                </g>
+              )
+            })}
+          {targets?.locations &&
+            [...targets.locations].map(([id, text]) => {
+              const layout = layouts.get(id)
+              if (!layout) return null
+              const box = pad(layout.label, 7)
+              return (
+                <g key={`t-${id}`}>
+                  <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={8} className="board-target fill-none stroke-board-glow" strokeWidth={3} />
+                  {text && <TargetTag x={layout.label.x + layout.label.w / 2} y={box.y - 14} text={text} />}
+                </g>
+              )
+            })}
+          {targets?.links &&
+            [...targets.links].map(([id, text]) => {
+              const route = routes.find((r) => r.link.id === id)
+              if (!route || !text) return null
+              return <TargetTag key={`t-${id}`} x={route.mid.x} y={route.mid.y - 22} text={text} />
+            })}
+          {recent?.slot &&
+            (() => {
+              const [locationId, index] = recent.slot.split(':')
+              const rect = layouts.get(locationId)?.slots[Number(index)]
+              if (!rect) return null
+              const box = pad(rect, 2)
+              return <rect key={recent.key} x={box.x} y={box.y} width={box.w} height={box.h} rx={4} className="board-flash fill-none stroke-brass-200" strokeWidth={3} />
+            })()}
+          {recent?.location &&
+            (() => {
+              const layout = layouts.get(recent.location)
+              if (!layout) return null
+              return <circle key={recent.key} cx={layout.center.x} cy={layout.center.y} r={22} className="board-flash fill-none stroke-brass-200" strokeWidth={3} />
+            })()}
           {[
             selectedLocation && { id: selectedLocation, className: 'stroke-brass-200' },
             hover?.type === 'location' && { id: hover.id, className: 'stroke-board-glow' },
@@ -381,6 +506,70 @@ export function IllustratedBoard({
           })}
         </g>
 
+        {/* 6. Match targets: clickable above everything, so a banner never hides one */}
+        {targets && !editable && (
+          <g>
+            {[...(targets.slots ?? new Map<string, string | null>()).keys()].map((key) => {
+              const [locationId, index] = key.split(':')
+              const location = locations.get(locationId)
+              const rect = layouts.get(locationId)?.slots[Number(index)]
+              if (!location || location.type !== 'city' || !rect) return null
+              const allowed = location.slots[Number(index)] ?? []
+              const label = `${location.name} slot ${Number(index) + 1}: ${allowed.map((a) => INDUSTRY_NAMES[a]).join(' or ')}`
+              return (
+                <rect
+                  key={`hit-${key}`}
+                  x={rect.x - 3}
+                  y={rect.y - 3}
+                  width={rect.w + 6}
+                  height={rect.h + 6}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  {...asButton(label, () => onSelectSlot?.(locationId, Number(index)))}
+                  {...hoverHandlers({ type: 'location', id: locationId, slot: Number(index) })}
+                />
+              )
+            })}
+            {[...(targets.locations ?? new Map<string, string | null>()).keys()].map((id) => {
+              const layout = layouts.get(id)
+              const location = locations.get(id)
+              if (!layout || !location) return null
+              const box = pad(layout.label, 7)
+              return (
+                <rect
+                  key={`hit-${id}`}
+                  x={box.x}
+                  y={box.y}
+                  width={box.w}
+                  height={box.h}
+                  rx={8}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  {...asButton(location.name, () => onSelectLocation?.(id))}
+                  {...hoverHandlers({ type: 'location', id })}
+                />
+              )
+            })}
+            {[...(targets.links ?? new Map<string, string | null>()).keys()].map((id) => {
+              const route = routes.find((r) => r.link.id === id)
+              if (!route) return null
+              const label = `${locations.get(route.link.from)!.name} to ${locations.get(route.link.to)!.name} (${route.link.type === 'both' ? 'canal and rail' : route.link.type})`
+              return (
+                <g
+                  key={`hit-${id}`}
+                  className="cursor-pointer"
+                  {...asButton(label, () => onSelectLink?.(id))}
+                  {...hoverHandlers({ type: 'link', id })}
+                >
+                  <circle cx={route.mid.x} cy={route.mid.y} r={16} fill="transparent" />
+                  <LinkMarker at={route.mid} fill={null} />
+                  <circle cx={route.mid.x} cy={route.mid.y} r={13} className="board-target fill-none stroke-board-glow" strokeWidth={2.5} />
+                </g>
+              )
+            })}
+          </g>
+        )}
+
         {/* Editor: grid, drag handles and the live readout */}
         {editable && (
           <g>
@@ -419,7 +608,7 @@ export function IllustratedBoard({
         )}
       </svg>
 
-      {tooltip && <BoardTooltip board={board} era={era} built={built} playerName={playerName} target={tooltip} />}
+      {tooltip && <BoardTooltip board={board} era={era} built={built} prices={prices} playerName={playerName} target={tooltip} />}
     </div>
   )
 }
@@ -458,6 +647,20 @@ function Readout({ at, text }: { at: Point; text: string }) {
     <g pointerEvents="none">
       <rect x={x} y={y} width={width} height={26} rx={6} fill="#000" fillOpacity={0.82} className="stroke-board-glow" strokeWidth={1.5} />
       <text x={x + width / 2} y={y + 18} textAnchor="middle" className="fill-board-ink" fontSize={fontSize} fontWeight={600} fontFamily="ui-monospace, monospace" style={{ whiteSpace: 'pre' }}>
+        {text}
+      </text>
+    </g>
+  )
+}
+
+/** Small pill with a cost or payout, drawn above a clickable target. */
+function TargetTag({ x, y, text }: { x: number; y: number; text: string }) {
+  const width = text.length * 7.4 + 16
+  const left = Math.min(1000 - width - 4, Math.max(4, x - width / 2))
+  return (
+    <g pointerEvents="none">
+      <rect x={left} y={y - 11} width={width} height={22} rx={11} fill="#120d0a" fillOpacity={0.92} className="stroke-board-glow" strokeWidth={1.5} />
+      <text x={left + width / 2} y={y + 4.5} textAnchor="middle" className="fill-brass-200 font-display" fontSize={13} fontWeight={700}>
         {text}
       </text>
     </g>

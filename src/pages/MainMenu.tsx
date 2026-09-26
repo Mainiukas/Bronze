@@ -102,7 +102,7 @@ export function MainMenu({ modeId, onModeChange, mapId, onMapChange, onPlay, sav
 
         <fieldset>
           <SectionLegend index="02" title="Map" />
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {MAPS.map((gameMap) => (
               <MapCard
                 key={gameMap.id}

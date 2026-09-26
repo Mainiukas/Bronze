@@ -1,10 +1,12 @@
 /**
  * Map configuration.
  *
- * To add a map, append an entry to MAPS. The `board` block describes the
- * playable board (towns, building plots, routes) plus decoration (water,
- * hills, landmarks). MapPreview draws it in the lobby and the game board
- * renders it in play, so a new map needs no image assets.
+ * Two styles of map:
+ * - `illustrated`: the painted board (assets/map.png) whose towns, slots and
+ *   routes live in src/data/board.json. Canal and rail eras apply.
+ * - `schematic`: drawn entirely from the `board` block below (towns,
+ *   building plots, routes, decoration). MapPreview draws it in the lobby and
+ *   the game board renders it in play, so it needs no image assets.
  *
  * Coordinates live in a 160 × 100 box: x from 0 (west) to 160 (east),
  * y from 0 (north) to 100 (south). Keep towns about 30 units apart so their
@@ -25,8 +27,8 @@ export interface MapTown {
   readonly market?: number
   /**
    * Building plots. Each string is one plot; its letters are the
-   * industries allowed there: C colliery, I ironworks, M mill, W engine works.
-   * "CI" means a plot that takes either a colliery or an ironworks.
+   * industries allowed there: C coal mine, I iron works, M cotton mill,
+   * W engine works. "CI" means a plot that takes either.
    */
   readonly slots: readonly string[]
 }
@@ -68,7 +70,7 @@ export interface MapBoardData {
   readonly landmarks?: readonly MapLandmark[]
 }
 
-export interface MapConfig {
+interface MapConfigBase {
   /** Stable identifier. Saved to localStorage, so avoid renaming. */
   readonly id: string
   readonly name: string
@@ -78,12 +80,32 @@ export interface MapConfig {
   readonly flavor: string
   /** Supported player count. */
   readonly players: { readonly min: number; readonly max: number }
+}
+
+export interface SchematicMapConfig extends MapConfigBase {
+  readonly style: 'schematic'
   readonly board: MapBoardData
 }
 
+/** The painted board. Its locations and links come from src/data/board.json. */
+export interface IllustratedMapConfig extends MapConfigBase {
+  readonly style: 'illustrated'
+}
+
+export type MapConfig = SchematicMapConfig | IllustratedMapConfig
+
 export const MAPS = [
   {
+    id: 'wales-and-the-west',
+    style: 'illustrated',
+    name: 'Wales & the West',
+    terrain: 'Canals & Railways',
+    flavor: 'Welsh coal, Midlands workshops and Severn ports. Dig canals first, then race to lay the railways.',
+    players: { min: 2, max: 4 },
+  },
+  {
     id: 'mersey-valley',
+    style: 'schematic',
     name: 'Mersey Valley',
     terrain: 'River & Port',
     flavor: 'A broad tidal river feeds a busy port. Move goods downstream before your rivals do.',
@@ -130,6 +152,7 @@ export const MAPS = [
   },
   {
     id: 'black-country',
+    style: 'schematic',
     name: 'Black Country',
     terrain: 'Coal & Iron',
     flavor: 'Coal seams, ironworks and a tangle of canals. Crowded, cutthroat, and glowing all night.',
@@ -189,6 +212,7 @@ export const MAPS = [
   },
   {
     id: 'pennine-mills',
+    style: 'schematic',
     name: 'Pennine Mills',
     terrain: 'Moors & Mills',
     flavor: 'Mill towns tucked between windswept moors. Fast water, steep hills and few easy routes.',
@@ -252,7 +276,7 @@ export const MAPS = [
 export type GameMap = (typeof MAPS)[number]
 export type MapId = GameMap['id']
 
-export const DEFAULT_MAP_ID: MapId = 'mersey-valley'
+export const DEFAULT_MAP_ID: MapId = 'wales-and-the-west'
 
 /** Type guard: is `value` the id of a known map? Used to validate saved data. */
 export function isMapId(value: unknown): value is MapId {

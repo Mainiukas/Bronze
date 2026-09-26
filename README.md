@@ -7,11 +7,11 @@ Play against computer opponents or pass & play on one device.
 
 Each round, every player takes a turn of two actions:
 
-- **Build an industry** in a town in your network: a Colliery (coal), Ironworks
-  (iron), Mill (goods) or Engine Works (prestige every round). Your first build
-  can go anywhere.
+- **Build an industry** in a town in your network: a Coal mine, Iron works,
+  a goods maker (Cotton mill, Manufacturer, Pottery), a Port, a Shipyard or
+  Engine Works (prestige every round). Your first build can go anywhere.
 - **Build a link**: a canal or railway on a route touching your network.
-- **Ship goods** from a mill to a market town over built links (anyone's).
+- **Ship goods** to a market that buys them, over built links (anyone's).
   Money and +1★ per goods, doubled over 2+ links. Using an opponent's link
   pays them a toll.
 - **Raise funds.**
@@ -23,6 +23,26 @@ and market towns in your network add bonus prestige. Most prestige wins.
 Modes change the board size (outer towns are dropped), the number of rounds and
 the move timer. The full rules are in the game under ☰ → How to Play, and every
 number lives in `src/game/rules.ts`.
+
+### Wales & the West
+
+The default map is played on the illustrated board (`assets/map.png`), with a
+few extra rules:
+
+- **Eras.** The match starts in the canal era; the rail era begins half way
+  (round 6 of 10 in Normal). Only routes of the current era's kind can be
+  built. A route that allows both is built as the current era's kind.
+  Railways cost £5 plus 1 coal. Canals dug earlier keep carrying goods.
+- **Trade hubs** (The North, London, West Wales) are the markets. Each buys
+  only the goods shown on its plaque, and its price drops as goods are sold.
+- **Ports** buy any goods at £3 each and pay £1 a round. Shipping to someone
+  else's port pays them £1 per goods. A Shipyard needs a Port in the same town.
+- **Stops** (Lichfield, Brecon, …) have no slots, but routes pass through them.
+- **Smaller modes** use the heart of the map: 13 locations in Bullet, 18 in
+  Blitz and all 25 in Normal (the `ring` field in `board.json`).
+
+Build, ship and link by clicking the board: legal slots, markets and links
+light up for the action you picked.
 
 Built with React 19, TypeScript, Vite, Tailwind CSS v4 and React Router.
 
@@ -63,7 +83,8 @@ banners, industry slots, stops and trade hubs. It is a pure view
 (`src/components/board/IllustratedBoard.tsx`): the era, what's built and the
 selection come in as props, and clicks come out through `onSelectLocation`,
 `onSelectSlot` and `onSelectLink`. The page adds an era toggle and a sandbox
-for placing tiles. It isn't connected to the match rules yet.
+for placing tiles. Matches on Wales & the West use the same component, with
+`targets`, `prices`, `closed` and `recent` props for the match screen.
 
 Coordinates in `board.json` are percentages of the image (0–100), so the
 overlay stays aligned at any size. Each link has an optional `curve`: how far
@@ -78,7 +99,8 @@ its control point sits to the side of the straight line, in % (0 = straight).
    `src/data/board.json`. `npm test` checks the file stays valid.
 
 Edits are kept in this browser until you press **Reset**, so a reload doesn't
-lose them.
+lose them. While a draft is saved, matches in the same browser draw the board
+from it, so you can check a calibration in a real game before exporting.
 
 ## Project structure
 
@@ -90,6 +112,7 @@ src/
     ai.ts                 Computer player (plans both actions of its turn)
     types.ts              GameState and action types
     engine.test.ts        Rules tests and simulated matches
+    illustrated.test.ts   Wales & the West rules: eras, stops, hubs, ports, shipyards
   App.tsx                 Router, layout, app-wide state (selection, settings, saved match, stats)
   components/board/       Illustrated map board: IllustratedBoard (view), parts (SVG pieces),
                           layout, geometry (curves), icons, BoardTooltip
@@ -119,7 +142,7 @@ src/
     MainMenu.tsx, Game.tsx, MapBoard.tsx, Achievements.tsx, Locker.tsx, Shop.tsx, Tournaments.tsx
   data/
     gameModes.ts          Game modes: rounds, starting money, board size, timer
-    maps.ts               Maps: towns, building plots, routes, decoration
+    maps.ts               Maps: the illustrated map plus schematic maps (towns, plots, routes, decoration)
     board.json            Map board data: locations, slots, links (edit via #/board?edit=1)
     board.ts              Board types, validation, export formatting, era rules
     achievements.ts       Achievements and lifetime stats
@@ -137,9 +160,9 @@ src/
 
 - **New game mode:** add an entry to `GAME_MODES` in `src/data/gameModes.ts`.
   To give it a new icon, add a name to `ModeIconName` and map it in `ModeCard.tsx`.
-- **New map:** add an entry to `MAPS` in `src/data/maps.ts`: towns with their
-  building plots and ring (which modes include them), routes, and decoration,
-  on a 160 × 100 grid. The lobby preview and the game board are both drawn from
+- **New map:** add a schematic entry to `MAPS` in `src/data/maps.ts`: towns
+  with their building plots and ring (which modes include them), routes, and
+  decoration, on a 160 × 100 grid. The lobby preview and the game board are both drawn from
   it, and `npm test` checks that every mode's cut of the map is connected and
   plays to the end.
 - **Balance:** change the numbers in `src/game/rules.ts`, then run

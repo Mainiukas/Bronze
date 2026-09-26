@@ -32,9 +32,10 @@ export function HowToPlayModal({ open, onClose }: InfoModalProps) {
               network. +{RULES.linkPrestige}★.
             </Rule>
             <Rule name="Ship goods">
-              Send all goods from one mill to a market town over built links, anyone’s. Each goods sells at the market’s
-              price, which drops £{RULES.priceDropPerGoods} per goods sold. +1★ per goods, doubled when the goods travel{' '}
-              {RULES.longHaulLinks} or more links. Using an opponent’s link costs a £{RULES.toll} toll, paid to them.
+              Send all goods from one of your goods industries to a market that buys them, over built links (anyone’s).
+              Market towns and hubs pay their current price, which drops £{RULES.priceDropPerGoods} per goods sold and
+              recovers £1 a round. +1★ per goods, doubled when the goods travel {RULES.longHaulLinks} or more links. Using
+              an opponent’s link costs a £{RULES.toll} toll, paid to them.
             </Rule>
             <Rule name="Raise funds">Take £{RULES.raiseFunds}.</Rule>
           </ul>
@@ -58,11 +59,32 @@ export function HowToPlayModal({ open, onClose }: InfoModalProps) {
                     </p>
                     <p className="text-xs text-parchment-300">
                       {formatCost(def.cost)} · {def.output}
+                      {kind === 'works' ? ' (original maps only)' : ''}
                     </p>
                   </div>
                 </li>
               )
             })}
+          </ul>
+        </Section>
+
+        <Section title="Wales & the West">
+          <ul className="flex flex-col gap-2.5">
+            <Rule name="Eras">
+              The match starts in the canal era and switches to the rail era half way through. You can only build routes
+              of the current era: canal-only routes early, rail-only routes late, and routes drawn with both tracks as
+              whichever the era allows. Links already built keep carrying goods.
+            </Rule>
+            <Rule name="Trade hubs">
+              The North, London and West Wales buy only the goods shown on their plaques, at the price in the corner.
+              They can’t be built in, but links to them count toward your network.
+            </Rule>
+            <Rule name="Ports">
+              Buy any goods for a flat £{RULES.portPrice}. If you sell at someone else’s port, they get £{RULES.portFee} per
+              goods. A shipyard needs a port in the same town.
+            </Rule>
+            <Rule name="Stops">Brecon, Lichfield and Taunton carry routes but have no building plots.</Rule>
+            <Rule name="Smaller modes">Blitz and Bullet close the outer towns; they’re drawn faded.</Rule>
           </ul>
         </Section>
 

@@ -173,7 +173,7 @@ export function StopBanner({ rect, name, fontSize }: { rect: Rect; name: string;
 }
 
 /** Stone plaque for trade hubs, with icons of the goods they buy. */
-export function HubPlaque({ layout, name, buys }: { layout: LocationLayout; name: string; buys: Industry[] }) {
+export function HubPlaque({ layout, name, buys, price }: { layout: LocationLayout; name: string; buys: Industry[]; price?: number }) {
   const { x, y, w, h } = layout.label
   const bolts = [
     [x + 7, y + 7],
@@ -200,6 +200,14 @@ export function HubPlaque({ layout, name, buys }: { layout: LocationLayout; name
       >
         {name.toUpperCase()}
       </text>
+      {price !== undefined && (
+        <g>
+          <rect x={x + w - 26} y={y - 11} width={34} height={20} rx={4} className="fill-board-slot stroke-brass-300" strokeWidth={1.5} />
+          <text x={x + w - 9} y={y + 3.5} textAnchor="middle" className="fill-brass-200 font-display" fontSize={13} fontWeight={800}>
+            £{price}
+          </text>
+        </g>
+      )}
       {layout.icons.map((icon, i) => (
         <g key={buys[i]}>
           <circle cx={icon.x + icon.w / 2} cy={icon.y + icon.h / 2} r={icon.w / 2} fill="#2e2c28" className="stroke-board-bronze" strokeWidth={1.2} />
@@ -218,7 +226,7 @@ export function SlotBox({
 }: {
   rect: Rect
   allowed: Industry[]
-  tile: { industry: Industry; color: string } | null
+  tile: { industry: Industry; color: string; goods?: number } | null
 }) {
   const { x, y, w, h } = rect
   return (
@@ -237,6 +245,14 @@ export function SlotBox({
         <g>
           <rect x={x + 1.5} y={y + 1.5} width={w - 3} height={h - 3} rx={2.5} style={{ fill: tile.color }} stroke="#000" strokeOpacity={0.55} strokeWidth={1.2} />
           <IndustryGlyph industry={tile.industry} cx={x + w / 2} cy={y + h / 2} size={w * 0.68} className="stroke-board-slot" />
+          {!!tile.goods && (
+            <g>
+              <circle cx={x + w} cy={y} r={8} className="fill-brass-300 stroke-board-outline" strokeWidth={1.5} />
+              <text x={x + w} y={y + 4.5} textAnchor="middle" className="fill-board-outline font-display" fontSize={12.5} fontWeight={800}>
+                {tile.goods}
+              </text>
+            </g>
+          )}
         </g>
       )}
     </g>

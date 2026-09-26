@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
+import { IllustratedBoard, type BoardTargets } from '../components/board/IllustratedBoard'
 import { Dialog } from '../components/Dialog'
 import { GameBoard, type BoardHighlights } from '../components/game/GameBoard'
 import { GameLog } from '../components/game/GameLog'
@@ -11,24 +12,31 @@ import { TurnPanel, type UiMode } from '../components/game/TurnPanel'
 import { IconArrowLeft, IconBook, IconCog } from '../components/icons'
 import type { Achievement } from '../data/achievements'
 import { getGameMode } from '../data/gameModes'
+import { BOARD, parseBoardData, slotKey, type BoardData, type BuiltState, type Industry } from '../data/board'
 import { getMap } from '../data/maps'
 import type { GameSettings } from '../data/settings'
 import { chooseAIAction } from '../game/ai'
 import {
   applyAction,
+  buildingAt,
   buildTargets,
   canAfford,
   currentPlayer,
   IllegalActionError,
+  industriesOn,
+  linkCost,
   linkTargets,
   networkTowns,
   quote,
   shipQuotes,
   shipSources,
+  type ShipQuote,
 } from '../game/engine'
-import { INDUSTRIES, INDUSTRY_ORDER, LINK_COST } from '../game/rules'
-import type { GameAction, GameState } from '../game/types'
+import { INDUSTRIES } from '../game/rules'
+import type { GameAction, GameState, IndustryKind } from '../game/types'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { playSound, startMusic, stopMusic, type SoundEffect } from '../lib/sound'
+import { STORAGE_KEYS } from '../lib/storage'
 
 interface GameProps {
   game: GameState
@@ -124,30 +132,52 @@ export function Game({ game, onGameChange, onMatchFinished, onLeave, onRematch, 
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // What the board should offer as clickable, given the current choice.
-  const highlights: BoardHighlights = {}
-  if (humanTurn && current) {
-    const readyMills = new Set(shipSources(game).map((b) => b.id))
-    if (ui.type === 'build' && ui.kind && canAfford(current, INDUSTRIES[ui.kind].cost)) {
-      highlights.plots = new Set(buildTargets(game, ui.kind).map((p) => `${p.townId}#${p.slot}`))
-    } else if (ui.type === 'link') {
-      highlights.routes = new Map(
-        linkTargets(game)
-          .filter((r) => canAfford(current, LINK_COST[r.kind]))
-          .map((r) => [r.id, `£${quote(current, LINK_COST[r.kind]).total}`]),
-      )
-    } else if (ui.type === 'ship') {
-      highlights.mills = readyMills
-      if (ui.buildingId !== null) {
-        highlights.selectedMill = ui.buildingId
-        highlights.markets = new Map(
-          shipQuotes(game, ui.buildingId).map((q) => [q.marketId, `+£${q.revenue - q.tollTotal} +${q.prestige}★`]),
-        )
-      }
-    } else if (ui.type === 'idle') {
-      // Mills with goods ready glow; clicking one starts shipping from it.
-      highlights.mills = readyMills
-    }
+  // What can be clicked on the board right now, given the current choice.
+  const readySources = new Set(humanTurn ? shipSources(game).map((b) => b.id) : [])
+  const buildPlots = humanTurn && current && ui.type === 'build' && ui.kind && canAfford(current, INDUSTRIES[ui.kind].cost) ? buildTargets(game, ui.kind) : []
+  const linkOffers = new Map<string, string>(
+    humanTurn && current && ui.type === 'link'
+      ? linkTargets(game)
+          .filter((r) => canAfford(current, linkCost(game, r)))
+          .map((r) => [r.id, `£${quote(current, linkCost(game, r)).total}`])
+      : [],
+  )
+  const quotes: ShipQuote[] = humanTurn && ui.type === 'ship' && ui.buildingId !== null ? shipQuotes(game, ui.buildingId) : []
+  const payout = (q: ShipQuote) => `+£${q.revenue - q.tollTotal - q.fee} +${q.prestige}★`
+  const showSources = humanTurn && (ui.type === 'idle' || ui.type === 'ship')
+
+  const shipTo = (marketId: string) => {
+    if (ui.type === 'ship' && ui.buildingId !== null) act({ type: 'ship', buildingId: ui.buildingId, marketId })
+  }
+
+  // Schematic maps: the original SVG board.
+  const highlights: BoardHighlights = {
+    plots: new Set(buildPlots.map((p) => `${p.townId}#${p.slot}`)),
+    routes: linkOffers,
+    mills: showSources ? readySources : undefined,
+    selectedMill: ui.type === 'ship' ? ui.buildingId : null,
+    markets: new Map(quotes.map((q) => [q.marketId, payout(q)])),
+  }
+
+  // The painted board: targets keyed by slot, link and location.
+  const targets: BoardTargets = { slots: new Map(), links: linkOffers, locations: new Map() }
+  const slotTargets = targets.slots as Map<string, string | null>
+  for (const plot of buildPlots) slotTargets.set(slotKey(plot.townId, plot.slot), null)
+  if (showSources) {
+    for (const b of game.buildings) if (readySources.has(b.id)) slotTargets.set(slotKey(b.townId, b.slot), null)
+  }
+  for (const q of quotes) {
+    if (q.marketId.startsWith('port:')) {
+      const port = game.buildings.find((b) => `port:${b.id}` === q.marketId)
+      if (port) slotTargets.set(slotKey(port.townId, port.slot), payout(q))
+    } else (targets.locations as Map<string, string | null>).set(q.marketId, payout(q))
+  }
+
+  const onBoardSlot = (townId: string, slot: number) => {
+    const building = buildingAt(game, townId, slot)
+    if (ui.type === 'build' && ui.kind) return act({ type: 'build', kind: ui.kind, townId, slot })
+    if (building && quotes.some((q) => q.marketId === `port:${building.id}`)) return shipTo(`port:${building.id}`)
+    if (building && readySources.has(building.id)) setUi({ type: 'ship', buildingId: building.id })
   }
 
   const viewer = current && !current.isAI ? current.id : 0
@@ -167,6 +197,7 @@ export function Game({ game, onGameChange, onMatchFinished, onLeave, onRematch, 
             </p>
             <p className="text-xs text-parchment-400">
               {mode.name} · {game.status === 'finished' ? 'Final' : `Round ${game.round} of ${game.totalRounds}`}
+              {game.era && game.status === 'playing' && ` · ${game.era === 'canal' ? 'Canal' : 'Rail'} era`}
             </p>
           </div>
           <RoundTrack round={game.round} total={game.totalRounds} finished={game.status === 'finished'} />
@@ -181,26 +212,43 @@ export function Game({ game, onGameChange, onMatchFinished, onLeave, onRematch, 
 
       <main className="mx-auto grid w-full max-w-[96rem] flex-1 grid-cols-[minmax(0,1fr)] gap-4 px-4 py-4 [grid-template-areas:'turn'_'board'_'players'_'log'] sm:px-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:[grid-template-areas:'board_turn'_'board_players'_'board_log']">
         <div className="flex min-w-0 flex-col gap-3 [grid-area:board] lg:sticky lg:top-20">
-          <section className="plate overflow-hidden" aria-label="Board">
-            <div className="overflow-x-auto">
-              <div className="min-w-[44rem] bg-[linear-gradient(to_right,rgb(232_181_124/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(232_181_124/0.04)_1px,transparent_1px)] bg-size-[5%_8%] p-2 sm:p-3">
-                <GameBoard
-                  game={game}
-                  decor={map.board}
-                  highlights={highlights}
-                  viewer={viewer}
-                  networkOfViewer={network}
-                  onPlot={(townId, slot) => ui.type === 'build' && ui.kind && act({ type: 'build', kind: ui.kind, townId, slot })}
-                  onRoute={(routeId) => act({ type: 'link', routeId })}
-                  onMill={(buildingId) => setUi({ type: 'ship', buildingId })}
-                  onMarket={(marketId) =>
-                    ui.type === 'ship' && ui.buildingId !== null && act({ type: 'ship', buildingId: ui.buildingId, marketId })
-                  }
-                />
+          {map.style === 'illustrated' ? (
+            <section className="plate mx-auto w-full overflow-hidden lg:max-w-[calc(100dvh-7rem)]" aria-label="Board">
+              <div className="overflow-x-auto">
+                <div className="min-w-[40rem] p-1.5 sm:p-2 md:min-w-0">
+                  <PaintedBoard
+                    game={game}
+                    viewer={viewer}
+                    network={network}
+                    targets={targets}
+                    selectedSource={ui.type === 'ship' ? ui.buildingId : null}
+                    onSelectSlot={onBoardSlot}
+                    onSelectLocation={shipTo}
+                    onSelectLink={(routeId) => act({ type: 'link', routeId })}
+                  />
+                </div>
               </div>
-            </div>
-          </section>
-          <Legend viewer={viewer} />
+            </section>
+          ) : (
+            <section className="plate overflow-hidden" aria-label="Board">
+              <div className="overflow-x-auto">
+                <div className="min-w-[44rem] bg-[linear-gradient(to_right,rgb(232_181_124/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(232_181_124/0.04)_1px,transparent_1px)] bg-size-[5%_8%] p-2 sm:p-3">
+                  <GameBoard
+                    game={game}
+                    decor={map.board}
+                    highlights={highlights}
+                    viewer={viewer}
+                    networkOfViewer={network}
+                    onPlot={(townId, slot) => ui.type === 'build' && ui.kind && act({ type: 'build', kind: ui.kind, townId, slot })}
+                    onRoute={(routeId) => act({ type: 'link', routeId })}
+                    onMill={(buildingId) => setUi({ type: 'ship', buildingId })}
+                    onMarket={shipTo}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+          <Legend viewer={viewer} kinds={industriesOn(game.board)} painted={map.style === 'illustrated'} />
         </div>
 
         <div className="[grid-area:turn]">
@@ -284,10 +332,10 @@ function RoundTrack({ round, total, finished }: { round: number; total: number; 
 }
 
 /** Key to the board's symbols. */
-function Legend({ viewer }: { viewer: number }) {
+function Legend({ viewer, kinds, painted }: { viewer: number; kinds: IndustryKind[]; painted: boolean }) {
   return (
     <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-parchment-300">
-      {INDUSTRY_ORDER.map((kind) => (
+      {kinds.map((kind) => (
         <li key={kind} className="flex items-center gap-1.5">
           <IndustryIcon kind={kind} className="size-4 text-bronze-300" />
           {INDUSTRIES[kind].name}
@@ -307,13 +355,70 @@ function Legend({ viewer }: { viewer: number }) {
         Railway
       </li>
       <li className="flex items-center gap-1.5">
-        <span className="size-3 rounded-full border border-brass-300 bg-soot-800 ring-1 ring-brass-300/60 ring-offset-1 ring-offset-soot-900" />
-        Market
+        {painted ? (
+          <span className="h-3 w-4 rounded-sm border border-board-bronze bg-board-hub" />
+        ) : (
+          <span className="size-3 rounded-full border border-brass-300 bg-soot-800 ring-1 ring-brass-300/60 ring-offset-1 ring-offset-soot-900" />
+        )}
+        {painted ? 'Trade hub' : 'Market'}
       </li>
       <li className="flex items-center gap-1.5">
         <span className="size-3 rounded-full border border-dashed" style={{ borderColor: seatColor(viewer) }} />
         Your network
       </li>
     </ul>
+  )
+}
+
+interface PaintedBoardProps {
+  game: GameState
+  viewer: number
+  network: Set<string>
+  targets: BoardTargets
+  selectedSource: number | null
+  onSelectSlot: (townId: string, slot: number) => void
+  onSelectLocation: (townId: string) => void
+  onSelectLink: (routeId: string) => void
+}
+
+/** The match drawn on the painted board: game state translated into the board's props. */
+function PaintedBoard({ game, viewer, network, targets, selectedSource, onSelectSlot, onSelectLocation, onSelectLink }: PaintedBoardProps) {
+  // Positions calibrated in the map editor (not yet pasted into board.json) apply here too.
+  const [draft] = usePersistentState<BoardData | null>(STORAGE_KEYS.boardDraft, null, parseBoardData)
+  const board = draft ?? BOARD
+  const inPlay = new Set(game.board.towns.map((t) => t.id))
+  const built: BuiltState = { slots: {}, links: {} }
+  for (const b of game.buildings) {
+    built.slots[slotKey(b.townId, b.slot)] = { player: b.owner, industry: b.kind as Industry, goods: b.goods }
+  }
+  for (const [id, link] of Object.entries(game.links)) built.links[id] = { player: link.owner }
+  const source = selectedSource === null ? undefined : game.buildings.find((b) => b.id === selectedSource)
+  const event = game.lastEvent
+  const recent =
+    event?.type === 'build'
+      ? { key: game.nextId, slot: slotKey(event.townId, event.slot) }
+      : event?.type === 'link'
+        ? { key: game.nextId, link: event.routeId }
+        : event?.type === 'ship'
+          ? { key: game.nextId, path: event.routeIds, location: event.marketTownId }
+          : null
+
+  return (
+    <IllustratedBoard
+      board={board}
+      era={game.era ?? 'canal'}
+      built={built}
+      playerName={(p) => game.players[p]?.name ?? `Player ${p + 1}`}
+      selected={source ? { type: 'slot', locationId: source.townId, index: source.slot } : null}
+      targets={targets}
+      prices={game.prices}
+      closed={new Set(board.locations.filter((l) => !inPlay.has(l.id)).map((l) => l.id))}
+      network={{ locations: network, color: seatColor(viewer) }}
+      recent={recent}
+      onSelectSlot={onSelectSlot}
+      onSelectLocation={onSelectLocation}
+      onSelectLink={onSelectLink}
+      className="rounded-lg"
+    />
   )
 }

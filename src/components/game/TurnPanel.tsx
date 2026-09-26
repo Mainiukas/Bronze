@@ -4,13 +4,17 @@ import {
   canAfford,
   currentPlayer,
   getTown,
+  industriesOn,
+  linkCost,
+  linkKindNow,
   linkTargets,
+  networkTowns,
   quote,
   shipQuotes,
   shipSources,
   type Quote,
 } from '../../game/engine'
-import { INDUSTRIES, INDUSTRY_ORDER, LINK_COST, RULES } from '../../game/rules'
+import { INDUSTRIES, LINK_COST, RULES } from '../../game/rules'
 import type { GameAction, GameState, IndustryKind } from '../../game/types'
 import { Gear } from '../Gear'
 import { IconClose } from '../icons'
@@ -33,6 +37,12 @@ interface TurnPanelProps {
   /** The move timer for this turn, if timed. */
   timer?: ReactNode
   onShowResults: () => void
+}
+
+/** Does the player's network include a town with this industry (anyone's)? */
+function hasNeededIndustry(game: GameState, kind: IndustryKind): boolean {
+  const network = networkTowns(game, currentPlayer(game).id)
+  return game.buildings.some((b) => b.kind === kind && (network.size === 0 || network.has(b.townId)))
 }
 
 /** "£11 (buys 1 iron)" */
@@ -73,11 +83,24 @@ export function TurnPanel({ game, ui, onUiChange, onAction, error, timer, onShow
       {!player.isAI && timer}
     </div>
   )
+  const eraLine = game.era && (
+    <p className="-mt-2 flex items-center gap-2 text-xs text-parchment-300">
+      <span
+        className={`rounded px-1.5 py-0.5 font-display font-bold tracking-[0.12em] uppercase ${
+          game.era === 'canal' ? 'bg-board-water/30 text-verdigris-300' : 'bg-board-rail/20 text-board-rail'
+        }`}
+      >
+        {game.era} era
+      </span>
+      {game.era === 'canal' ? `Railways from round ${game.railEraRound}` : 'Canals can no longer be dug'}
+    </p>
+  )
 
   if (player.isAI) {
     return (
       <Panel>
         {header}
+        {eraLine}
         <p className="flex items-center gap-2.5 text-parchment-300">
           <Gear teeth={10} holes={0} className="size-5 animate-[spin_2.5s_linear_infinite] text-bronze-400" />
           Planning the next move…
@@ -89,6 +112,7 @@ export function TurnPanel({ game, ui, onUiChange, onAction, error, timer, onShow
   return (
     <Panel>
       {header}
+      {eraLine}
       {ui.type === 'idle' && <ActionMenu game={game} onUiChange={onUiChange} onAction={onAction} />}
       {ui.type === 'build' && <BuildPicker game={game} kind={ui.kind} onUiChange={onUiChange} onAction={onAction} />}
       {ui.type === 'link' && <LinkPicker game={game} onUiChange={onUiChange} onAction={onAction} />}
@@ -116,10 +140,17 @@ interface PickerProps {
 
 function ActionMenu({ game, onUiChange, onAction }: PickerProps) {
   const player = currentPlayer(game)
-  const canBuild = INDUSTRY_ORDER.some((kind) => canAfford(player, INDUSTRIES[kind].cost) && buildTargets(game, kind).length > 0)
-  const canLink = linkTargets(game).some((route) => canAfford(player, LINK_COST[route.kind]))
-  const mills = shipSources(game)
-  const cheapest = Math.min(...INDUSTRY_ORDER.map((kind) => quote(player, INDUSTRIES[kind].cost).total))
+  const kinds = industriesOn(game.board)
+  const canBuild = kinds.some((kind) => canAfford(player, INDUSTRIES[kind].cost) && buildTargets(game, kind).length > 0)
+  const canLink = linkTargets(game).some((route) => canAfford(player, linkCost(game, route)))
+  const sources = shipSources(game)
+  const cheapest = Math.min(...kinds.map((kind) => quote(player, INDUSTRIES[kind].cost).total))
+  const linkPrices =
+    game.era === 'canal'
+      ? `Canals £${LINK_COST.canal.money}`
+      : game.era === 'rail'
+        ? `Railways £${LINK_COST.rail.money} + coal`
+        : `Canal £${LINK_COST.canal.money} · Rail £${LINK_COST.rail.money}+coal`
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -127,16 +158,16 @@ function ActionMenu({ game, onUiChange, onAction }: PickerProps) {
         <ActionButton title="Build industry" detail={canBuild ? `From £${cheapest}` : 'No plot you can afford'} disabled={!canBuild} onClick={() => onUiChange({ type: 'build', kind: null })} />
         <ActionButton
           title="Build link"
-          detail={canLink ? `Canal £${LINK_COST.canal.money} · Rail £${LINK_COST.rail.money}+coal` : 'No route you can afford'}
+          detail={canLink ? linkPrices : 'No route you can afford'}
           disabled={!canLink}
           onClick={() => onUiChange({ type: 'link' })}
         />
         <ActionButton
           title="Ship goods"
-          detail={mills.length ? `${mills.length} mill${mills.length > 1 ? 's' : ''} ready` : 'No goods can reach a market'}
-          disabled={mills.length === 0}
-          highlight={mills.some((m) => m.goods >= RULES.millCapacity)}
-          onClick={() => onUiChange({ type: 'ship', buildingId: mills.length === 1 ? mills[0].id : null })}
+          detail={sources.length ? `${sources.length} ready to ship` : 'No goods can reach a buyer'}
+          disabled={sources.length === 0}
+          highlight={sources.some((b) => b.goods >= RULES.goodsCapacity)}
+          onClick={() => onUiChange({ type: 'ship', buildingId: sources.length === 1 ? sources[0].id : null })}
         />
         <ActionButton title="Raise funds" detail={`+£${RULES.raiseFunds}`} onClick={() => onAction({ type: 'raiseFunds' })} />
       </div>
@@ -214,12 +245,19 @@ function BuildPicker({ game, kind, onUiChange, onAction }: PickerProps & { kind:
       <div className="flex flex-col gap-3">
         <PickerHeader title="Build an industry" hint="Choose what to build." onCancel={cancel} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          {INDUSTRY_ORDER.map((option) => {
+          {industriesOn(game.board).map((option) => {
             const def = INDUSTRIES[option]
             const q = quote(player, def.cost)
             const plots = buildTargets(game, option).length
             const affordable = q.total <= player.money
-            const reason = plots === 0 ? 'No free plot in your network' : affordable ? null : `Needs £${q.total}`
+            const reason =
+              plots > 0
+                ? affordable
+                  ? null
+                  : `Needs £${q.total}`
+                : def.needsInTown && !hasNeededIndustry(game, def.needsInTown)
+                  ? `Needs a ${INDUSTRIES[def.needsInTown].name} in the same town`
+                  : 'No free plot in your network'
             return (
               <button
                 key={option}
@@ -266,6 +304,9 @@ function BuildPicker({ game, kind, onUiChange, onAction }: PickerProps & { kind:
                 {twin && <span className="text-parchment-400"> · plot {plot.slot + 1}</span>}
               </span>
               {town.market !== null && <span className="text-xs text-brass-300">market £{game.prices[town.id]}</span>}
+              {town.kind === 'city' && game.board.eras && (
+                <span className="text-xs text-parchment-400">{town.slots[plot.slot].map((k) => INDUSTRIES[k].name).join(' / ')}</span>
+              )}
             </Choice>
           )
         })}
@@ -281,17 +322,21 @@ function LinkPicker({ game, onUiChange, onAction }: PickerProps) {
     <div className="flex flex-col gap-3">
       <PickerHeader
         title="Build a link"
-        hint={`Canals cost £${LINK_COST.canal.money}; railways £${LINK_COST.rail.money} and 1 coal. +${RULES.linkPrestige}★ each.`}
+        hint={
+          game.era
+            ? `In the ${game.era} era you can only build ${game.era === 'canal' ? `canals (£${LINK_COST.canal.money})` : `railways (£${LINK_COST.rail.money} and 1 coal)`}. +${RULES.linkPrestige}★ each.`
+            : `Canals cost £${LINK_COST.canal.money}; railways £${LINK_COST.rail.money} and 1 coal. +${RULES.linkPrestige}★ each.`
+        }
         onCancel={() => onUiChange({ type: 'idle' })}
       />
       <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto pr-1">
         {routes.map((route) => {
-          const q = quote(player, LINK_COST[route.kind])
+          const q = quote(player, linkCost(game, route))
           return (
             <Choice key={route.id} disabled={q.total > player.money} onClick={() => onAction({ type: 'link', routeId: route.id })}>
               <span>
                 {getTown(game, route.from).name} – {getTown(game, route.to).name}
-                <span className="text-parchment-400"> · {route.kind === 'canal' ? 'canal' : 'railway'}</span>
+                <span className="text-parchment-400"> · {linkKindNow(game, route) === 'canal' ? 'canal' : 'railway'}</span>
               </span>
               <span className="text-xs font-semibold whitespace-nowrap text-bronze-200">{describeQuote(q)}</span>
             </Choice>
@@ -303,18 +348,22 @@ function LinkPicker({ game, onUiChange, onAction }: PickerProps) {
 }
 
 function ShipPicker({ game, buildingId, onUiChange, onAction }: PickerProps & { buildingId: number | null }) {
-  const mills = shipSources(game)
+  const sources = shipSources(game)
   const cancel = () => onUiChange({ type: 'idle' })
 
   if (buildingId === null) {
     return (
       <div className="flex flex-col gap-3">
-        <PickerHeader title="Ship goods" hint="Pick a mill with goods, on the board or here." onCancel={cancel} />
+        <PickerHeader title="Ship goods" hint="Pick one of your industries with goods, on the board or here." onCancel={cancel} />
         <div className="flex flex-col gap-1.5">
-          {mills.map((mill) => (
-            <Choice key={mill.id} onClick={() => onUiChange({ type: 'ship', buildingId: mill.id })}>
-              <span>Mill in {getTown(game, mill.townId).name}</span>
-              <span className="text-xs font-semibold text-brass-300">{mill.goods} goods</span>
+          {sources.map((source) => (
+            <Choice key={source.id} onClick={() => onUiChange({ type: 'ship', buildingId: source.id })}>
+              <span>
+                {INDUSTRIES[source.kind].name} in {getTown(game, source.townId).name}
+              </span>
+              <span className="text-xs font-semibold text-brass-300">
+                {source.goods} {INDUSTRIES[source.kind].goodsName}
+              </span>
             </Choice>
           ))}
         </div>
@@ -322,28 +371,29 @@ function ShipPicker({ game, buildingId, onUiChange, onAction }: PickerProps & { 
     )
   }
 
-  const mill = game.buildings.find((b) => b.id === buildingId)!
+  const source = game.buildings.find((b) => b.id === buildingId)!
   const quotes = shipQuotes(game, buildingId)
   return (
     <div className="flex flex-col gap-3">
       <PickerHeader
-        title={`Ship ${mill.goods} goods`}
-        hint={`From ${getTown(game, mill.townId).name}. Pick a glowing market. Each goods sold lowers its price by £${RULES.priceDropPerGoods}.`}
-        onCancel={mills.length > 1 ? () => onUiChange({ type: 'ship', buildingId: null }) : cancel}
+        title={`Ship ${source.goods} ${INDUSTRIES[source.kind].goodsName}`}
+        hint={`From ${getTown(game, source.townId).name}. Pick a glowing buyer. Market towns drop £${RULES.priceDropPerGoods} per goods sold; ports pay a flat £${RULES.portPrice}.`}
+        onCancel={sources.length > 1 ? () => onUiChange({ type: 'ship', buildingId: null }) : cancel}
       />
       <div className="flex flex-col gap-1.5">
         {quotes.map((q) => (
           <Choice key={q.marketId} onClick={() => onAction({ type: 'ship', buildingId, marketId: q.marketId })}>
             <span>
-              {getTown(game, q.marketId).name}
+              {q.marketName}
               <span className="text-parchment-400">
                 {' '}
                 · {q.routeIds.length === 0 ? 'sold here' : `${q.routeIds.length} link${q.routeIds.length === 1 ? '' : 's'}`}
                 {q.tollTotal ? ` · £${q.tollTotal} toll` : ''}
+                {q.fee ? ` · £${q.fee} fee` : ''}
               </span>
             </span>
             <span className="text-xs font-semibold whitespace-nowrap text-brass-300">
-              +£{q.revenue - q.tollTotal} · +{q.prestige}★
+              +£{q.revenue - q.tollTotal - q.fee} · +{q.prestige}★
             </span>
           </Choice>
         ))}

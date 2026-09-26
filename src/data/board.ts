@@ -52,6 +52,11 @@ interface LocationBase {
   x: number
   /** % from the top of the image. */
   y: number
+  /**
+   * Which game modes use this location: 1 = every mode (the core),
+   * 2 = Normal and Blitz, 3 = Normal only. Defaults to 1.
+   */
+  ring?: 1 | 2 | 3
 }
 
 /** Buildable town with industry slots. */
@@ -71,6 +76,8 @@ export interface StopLocation extends LocationBase {
 /** Trade hub where goods are sold. Not buildable. */
 export interface HubLocation extends LocationBase {
   type: 'hub'
+  /** Starting price per goods sold here (£). */
+  price: number
   buys: Industry[]
 }
 
@@ -95,7 +102,7 @@ export interface BoardData {
 /** What has been built: rendered on top of the board. */
 export interface BuiltState {
   /** Key from slotKey(locationId, slotIndex). */
-  slots: Record<string, { player: number; industry: Industry }>
+  slots: Record<string, { player: number; industry: Industry; goods?: number }>
   /** Link id → owner. */
   links: Record<string, { player: number }>
 }
@@ -146,6 +153,7 @@ export function validateBoardData(raw: unknown): string[] {
     if (!isNumber(loc.x) || !isNumber(loc.y) || loc.x < 0 || loc.x > 100 || loc.y < 0 || loc.y > 100) {
       errors.push(`${where}: x and y must be numbers from 0 to 100`)
     }
+    if (loc.ring !== undefined && ![1, 2, 3].includes(loc.ring as number)) errors.push(`${where}: ring must be 1, 2 or 3`)
     if (loc.type === 'city') {
       if (!['small', 'medium', 'big'].includes(loc.size as string)) errors.push(`${where}: size must be small, medium or big`)
       if (typeof loc.region !== 'string' || !(loc.region in regions)) errors.push(`${where}: unknown region "${String(loc.region)}"`)
@@ -158,6 +166,7 @@ export function validateBoardData(raw: unknown): string[] {
       if (!Array.isArray(loc.buys) || loc.buys.length === 0 || !loc.buys.every(isIndustry)) {
         errors.push(`${where}: a hub needs a list of industries it buys`)
       }
+      if (!isNumber(loc.price) || loc.price < 1) errors.push(`${where}: a hub needs a price of at least 1`)
     } else if (loc.type !== 'stop') {
       errors.push(`${where}: type must be city, stop or hub`)
     }

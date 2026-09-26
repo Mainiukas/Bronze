@@ -4,9 +4,9 @@
  * little seeded noise so matches don't all play out the same way.
  */
 
-import { applyAction, currentPlayerId, findPath, legalActions, networkMarkets, networkTowns } from './engine'
-import { RULES } from './rules'
-import type { Building, GameAction, GameState } from './types'
+import { applyAction, currentPlayerId, findPath, legalActions, marketsFor, networkMarkets, networkTowns } from './engine'
+import { INDUSTRIES, RULES } from './rules'
+import type { GameAction, GameState, IndustryKind } from './types'
 
 /** Small deterministic PRNG (mulberry32). */
 function seededRandom(seed: number): () => number {
@@ -86,22 +86,26 @@ export function evaluate(state: GameState, playerId: number): number {
 
   for (const building of state.buildings) {
     if (building.owner !== playerId) continue
-    switch (building.kind) {
-      case 'colliery':
+    switch (INDUSTRIES[building.kind].yields) {
+      case 'coal':
         value += remaining * moneyValue * 1.8
         break
-      case 'ironworks':
+      case 'iron':
         value += remaining * moneyValue * 3.2
         break
-      case 'works':
+      case 'prestige':
         value += remaining
         break
-      case 'mill': {
-        const perGoods = goodsValue(state, building, moneyValue)
-        // Goods left in a mill after the last round are worth nothing.
+      case 'money':
+        // Port: £1 a round, plus fees when others sell there.
+        value += remaining * (moneyValue * 1 + 0.25)
+        break
+      case 'goods': {
+        const perGoods = goodsValue(state, building.owner, building.townId, building.kind, moneyValue)
+        // Goods left over after the last round are worth nothing.
         value += building.goods * perGoods * (remaining <= 1 ? 0.15 : 0.85)
-        // Output made at the end of the last round can't be shipped; a full mill wastes the next batch.
-        const batches = Math.max(0, remaining - 1 - (building.goods >= RULES.millCapacity ? 1 : 0))
+        // Output made at the end of the last round can't be shipped; a full store wastes the next batch.
+        const batches = Math.max(0, remaining - 1 - (building.goods >= RULES.goodsCapacity ? 1 : 0))
         value += batches * perGoods * 0.65
         break
       }
@@ -111,15 +115,16 @@ export function evaluate(state: GameState, playerId: number): number {
   value += networkMarkets(state, playerId).length * RULES.marketBonus
 
   // Room to grow: free plots in the network, while there's time to use them.
-  // Mill plots with a way to market are the prize.
+  // Goods plots with a way to a market that buys their goods are the prize.
   if (remaining > 2) {
     let potential = 0
     for (const townId of networkTowns(state, playerId)) {
       const town = state.board.towns.find((t) => t.id === townId)!
-      const toMarket = town.market !== null || hasMarketAccess(state, playerId, townId)
       town.slots.forEach((allowed, slot) => {
         if (state.buildings.some((b) => b.townId === townId && b.slot === slot)) return
-        potential += allowed.includes('mill') ? (toMarket ? 0.7 : 0.3) : 0.2
+        const goodsKinds = allowed.filter((kind) => INDUSTRIES[kind].yields === 'goods')
+        if (goodsKinds.length === 0) potential += allowed.includes('port') ? 0.4 : 0.2
+        else potential += goodsKinds.some((kind) => hasMarketAccess(state, playerId, townId, kind)) ? 0.7 : 0.3
       })
     }
     value += Math.min(potential, 3) * Math.min(1, (remaining - 2) / 3)
@@ -128,28 +133,62 @@ export function evaluate(state: GameState, playerId: number): number {
   return value
 }
 
-/** Can goods from this town reach any market over built links? */
-function hasMarketAccess(state: GameState, playerId: number, townId: string): boolean {
-  return state.board.towns.some((t) => t.market !== null && findPath(state, playerId, townId, t.id) !== null)
+/** Can goods of this kind from this town reach a market that buys them? */
+function hasMarketAccess(state: GameState, playerId: number, townId: string, kind: IndustryKind): boolean {
+  return marketsFor(state, kind).some((m) => findPath(state, playerId, townId, m.townId) !== null)
 }
 
-/** Rough worth of one goods from this mill, given where it can be shipped today. */
-function goodsValue(state: GameState, mill: Building, moneyValue: number): number {
-  let best = -Infinity
-  let marketCount = 0
-  let priceSum = 0
-  for (const town of state.board.towns) {
-    if (town.market === null) continue
-    marketCount++
-    priceSum += town.market
-    const path = findPath(state, mill.owner, mill.townId, town.id)
-    if (!path) continue
-    const tolls = Object.values(path.tollsByOwner).reduce((sum, n) => sum + n, 0)
-    const prestige = path.routeIds.length >= RULES.longHaulLinks ? 2 : 1
-    // Tolls are paid once per shipment; spread them over a typical load of 2 goods.
-    best = Math.max(best, state.prices[town.id] * moneyValue + prestige - tolls * RULES.toll * moneyValue * 0.5)
+/**
+ * Fewest links still to build from `from` to every town: built links (anyone's)
+ * are free, unbuilt routes that can be built this era or later cost one.
+ */
+function linkGaps(state: GameState, from: string): Map<string, number> {
+  const usable = state.board.routes.filter(
+    (route) => route.id in state.links || state.era !== 'rail' || route.kinds.includes('rail'),
+  )
+  const gaps = new Map<string, number>([[from, 0]])
+  const queue = [from]
+  // 0-1 breadth-first search: free edges go to the front of the queue.
+  while (queue.length) {
+    const town = queue.shift()!
+    const here = gaps.get(town)!
+    for (const route of usable) {
+      if (route.from !== town && route.to !== town) continue
+      const next = route.from === town ? route.to : route.from
+      const step = route.id in state.links ? 0 : 1
+      if (here + step < (gaps.get(next) ?? Infinity)) {
+        gaps.set(next, here + step)
+        if (step === 0) queue.unshift(next)
+        else queue.push(next)
+      }
+    }
   }
-  // Not connected to any market yet: worth something, since a link could fix that.
-  if (best === -Infinity) return 0.35 * ((priceSum / Math.max(1, marketCount)) * moneyValue + 1)
+  return gaps
+}
+
+/**
+ * Rough worth of one goods of this kind from this town. Connected markets
+ * count in full; markets still some links away count less for each missing
+ * link, so every link toward a buyer adds value.
+ */
+function goodsValue(state: GameState, owner: number, townId: string, kind: IndustryKind, moneyValue: number): number {
+  const markets = marketsFor(state, kind)
+  const gaps = linkGaps(state, townId)
+  let best = 0
+  for (const market of markets) {
+    const gap = gaps.get(market.townId)
+    if (gap === undefined) continue
+    const fee = market.owner !== null && market.owner !== owner ? RULES.portFee : 0
+    if (gap === 0) {
+      const path = findPath(state, owner, townId, market.townId)
+      if (!path) continue
+      const tolls = Object.values(path.tollsByOwner).reduce((sum, n) => sum + n, 0)
+      const prestige = path.routeIds.length >= RULES.longHaulLinks ? 2 : 1
+      // Tolls are paid once per shipment; spread them over a typical load of 2 goods.
+      best = Math.max(best, (market.price - fee) * moneyValue + prestige - tolls * RULES.toll * moneyValue * 0.5)
+    } else {
+      best = Math.max(best, ((market.price - fee) * moneyValue + 2) * 0.7 ** gap)
+    }
+  }
   return best
 }

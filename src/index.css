@@ -500,6 +500,18 @@ dialog.bz-dialog--drawer-left {
   }
 }
 
+/* Same, sized for the painted board (viewBox 1000). */
+.board-flow-lg {
+  stroke-dasharray: 10 16;
+  animation: board-flow-lg 0.9s linear infinite;
+}
+
+@keyframes board-flow-lg {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
 /* Whatever was just built flashes once. */
 .board-flash {
   transform-box: fill-box;

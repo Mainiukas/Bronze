@@ -8,11 +8,13 @@
  *   links touches. You build industries in your network and links that touch
  *   it; your very first build can go anywhere.
  * - Coal and iron you don't have are bought automatically at fixed prices.
- * - Mills make goods; ship them over built links (anyone's) to a market town
- *   for money and +1 prestige per goods (doubled over 2+ links).
- *   Using another player's link costs a toll, paid to its owner.
+ * - Goods industries make goods; ship them over built links (anyone's) to a
+ *   market that buys them, for money and +1 prestige per goods (doubled over
+ *   2+ links). Using another player's link costs a toll, paid to its owner.
+ * - Boards with eras start in the canal era and switch to the rail era half
+ *   way through. Only routes of the current era's kind can be built.
  * - At the end of each round industries produce and everyone gets income.
- * - After the last round: +1 prestige per £5, +2 per market in your network.
+ * - After the last round: +1 prestige per £5, +2 per market town in your network.
  */
 
 import type { IndustryKind, RouteKind } from './types'
@@ -26,8 +28,8 @@ export const RULES = {
   storeCap: 5,
   coalOverflowValue: 1,
   ironOverflowValue: 2,
-  /** Goods a mill can hold before its output is wasted. */
-  millCapacity: 3,
+  /** Goods an industry can hold before its output is wasted. */
+  goodsCapacity: 3,
   /** Money every player collects at the end of each round (£). */
   baseIncome: 2,
   /** Money from the Raise funds action (£). */
@@ -36,9 +38,13 @@ export const RULES = {
   toll: 1,
   /** Shipping earns +1 prestige per goods, doubled when goods travel at least this many links. */
   longHaulLinks: 2,
-  /** Each sale lowers a market's price by this much, down to the floor. */
+  /** Each sale lowers a market town's price by this much, down to the floor. */
   priceDropPerGoods: 1,
   priceFloor: 1,
+  /** Ports buy any goods at this fixed price (£ per goods). */
+  portPrice: 3,
+  /** Paid to a port's owner, per goods, when someone else sells there (£). */
+  portFee: 1,
   /** Prestige per link built. */
   linkPrestige: 1,
   /** End of game: prestige per market town in your network. */
@@ -56,51 +62,104 @@ export interface Cost {
 export interface IndustryDef {
   kind: IndustryKind
   name: string
-  /** Letter used in map data plot codes. */
-  code: string
+  /** What its goods are called, for industries that make goods. */
+  goodsName?: string
   cost: Cost
   /** Prestige gained when built. */
   prestige: number
-  /** Short description of what it does each round. */
+  /** What it does at the end of each round. */
+  yields: 'coal' | 'iron' | 'goods' | 'money' | 'prestige'
+  /** Ports: a market for any goods. */
+  market?: boolean
+  /** Must share a town with this industry (anyone's). */
+  needsInTown?: IndustryKind
+  /** Short description of what it does. */
   output: string
 }
 
 export const INDUSTRIES: Record<IndustryKind, IndustryDef> = {
-  colliery: {
-    kind: 'colliery',
-    name: 'Colliery',
-    code: 'C',
+  coal: {
+    kind: 'coal',
+    name: 'Coal mine',
     cost: { money: 5, coal: 0, iron: 0 },
     prestige: 1,
+    yields: 'coal',
     output: '+1 coal each round',
   },
-  ironworks: {
-    kind: 'ironworks',
-    name: 'Ironworks',
-    code: 'I',
+  iron: {
+    kind: 'iron',
+    name: 'Iron works',
     cost: { money: 7, coal: 1, iron: 0 },
     prestige: 2,
+    yields: 'iron',
     output: '+1 iron each round',
   },
-  mill: {
-    kind: 'mill',
-    name: 'Mill',
-    code: 'M',
+  cotton: {
+    kind: 'cotton',
+    name: 'Cotton mill',
+    goodsName: 'cotton',
     cost: { money: 6, coal: 0, iron: 1 },
     prestige: 2,
-    output: '+1 goods each round (holds 3)',
+    yields: 'goods',
+    output: '+1 cotton each round (holds 3)',
+  },
+  manufacturer: {
+    kind: 'manufacturer',
+    name: 'Manufacturer',
+    goodsName: 'manufactured goods',
+    cost: { money: 8, coal: 1, iron: 1 },
+    prestige: 3,
+    yields: 'goods',
+    output: '+1 manufactured goods each round (holds 3)',
+  },
+  pottery: {
+    kind: 'pottery',
+    name: 'Pottery',
+    goodsName: 'pottery',
+    cost: { money: 6, coal: 1, iron: 0 },
+    prestige: 2,
+    yields: 'goods',
+    output: '+1 pottery each round (holds 3)',
+  },
+  port: {
+    kind: 'port',
+    name: 'Port',
+    cost: { money: 7, coal: 0, iron: 0 },
+    prestige: 2,
+    yields: 'money',
+    market: true,
+    output: `+£1 each round. Buys any goods for £${RULES.portPrice}; others pay you £${RULES.portFee} per goods`,
+  },
+  shipyard: {
+    kind: 'shipyard',
+    name: 'Shipyard',
+    cost: { money: 14, coal: 1, iron: 2 },
+    prestige: 6,
+    yields: 'prestige',
+    needsInTown: 'port',
+    output: '+1 prestige each round. Needs a port in the same town',
   },
   works: {
     kind: 'works',
     name: 'Engine Works',
-    code: 'W',
     cost: { money: 12, coal: 1, iron: 2 },
     prestige: 5,
+    yields: 'prestige',
     output: '+1 prestige each round',
   },
 }
 
-export const INDUSTRY_ORDER: readonly IndustryKind[] = ['colliery', 'ironworks', 'mill', 'works']
+/** Display order. Each board only offers the industries its plots allow. */
+export const INDUSTRY_ORDER: readonly IndustryKind[] = [
+  'coal',
+  'iron',
+  'cotton',
+  'manufacturer',
+  'pottery',
+  'port',
+  'shipyard',
+  'works',
+]
 
 export const LINK_COST: Record<RouteKind, Cost> = {
   canal: { money: 3, coal: 0, iron: 0 },

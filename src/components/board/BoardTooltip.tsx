@@ -16,10 +16,14 @@ interface BoardTooltipProps {
   board: BoardData
   era: Era
   built: BuiltState
+  prices?: Readonly<Record<string, number>>
   playerName: (player: number) => string
   /** Location or link to describe. */
   target: { type: 'location'; location: BoardLocation; layout: LocationLayout; slot?: number } | { type: 'link'; link: BoardLink; at: Point }
 }
+
+/** "Ada’s", but "Your" for the local player. */
+const possessive = (name: string) => (name === 'You' ? 'Your' : `${name}’s`)
 
 const LINK_TYPE_LABEL = { canal: 'Canal only', rail: 'Rail only', both: 'Canal and rail' } as const
 
@@ -27,7 +31,7 @@ const LINK_TYPE_LABEL = { canal: 'Canal only', rail: 'Rail only', both: 'Canal a
  * Hover card for a location or link, positioned over the board in % so it
  * follows the board at any size. Flips below the target near the top edge.
  */
-export function BoardTooltip({ board, era, built, playerName, target }: BoardTooltipProps) {
+export function BoardTooltip({ board, era, built, prices, playerName, target }: BoardTooltipProps) {
   const anchor =
     target.type === 'location'
       ? { x: target.layout.center.x, top: target.layout.bounds.y, bottom: target.layout.bounds.y + target.layout.bounds.h }
@@ -46,7 +50,7 @@ export function BoardTooltip({ board, era, built, playerName, target }: BoardToo
       style={style}
     >
       {target.type === 'location' ? (
-        <LocationDetails board={board} era={era} built={built} playerName={playerName} location={target.location} slot={target.slot} />
+        <LocationDetails board={board} era={era} built={built} prices={prices} playerName={playerName} location={target.location} slot={target.slot} />
       ) : (
         <LinkDetails board={board} era={era} built={built} playerName={playerName} link={target.link} />
       )}
@@ -56,7 +60,7 @@ export function BoardTooltip({ board, era, built, playerName, target }: BoardToo
 
 type DetailsProps = Omit<BoardTooltipProps, 'target'>
 
-function LocationDetails({ board, era, built, playerName, location, slot }: DetailsProps & { location: BoardLocation; slot?: number }) {
+function LocationDetails({ board, era, built, prices, playerName, location, slot }: DetailsProps & { location: BoardLocation; slot?: number }) {
   const links = board.links.filter((l) => l.from === location.id || l.to === location.id)
   const active = links.filter((l) => isLinkActive(l.type, era)).length
   const kind =
@@ -80,7 +84,8 @@ function LocationDetails({ board, era, built, playerName, location, slot }: Deta
                 {tile && (
                   <span className="text-parchment-50">
                     {' '}
-                    — {playerName(tile.player)}’s {INDUSTRY_NAMES[tile.industry]}
+                    — {possessive(playerName(tile.player))} {INDUSTRY_NAMES[tile.industry]}
+                    {tile.goods ? ` (${tile.goods} goods)` : ''}
                   </span>
                 )}
               </li>
@@ -91,6 +96,7 @@ function LocationDetails({ board, era, built, playerName, location, slot }: Deta
       {location.type === 'hub' && (
         <p className="mb-1.5">
           <span className="text-parchment-400">Buys:</span> {location.buys.map((b) => GOODS_NAMES[b]).join(', ')}
+          {prices?.[location.id] !== undefined && <span className="text-brass-200"> · £{prices[location.id]} each</span>}
         </p>
       )}
       <p className="text-parchment-400">

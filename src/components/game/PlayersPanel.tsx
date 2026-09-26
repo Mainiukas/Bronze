@@ -12,7 +12,7 @@ export function PlayersPanel({ game }: { game: GameState }) {
         {game.players.map((player) => {
           const score = scoreFor(game, player.id)
           const industries = game.buildings.filter((b) => b.owner === player.id).length
-          const links = Object.values(game.links).filter((owner) => owner === player.id).length
+          const links = Object.values(game.links).filter((link) => link.owner === player.id).length
           const isActive = player.id === active
           return (
             <li

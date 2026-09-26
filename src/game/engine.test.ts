@@ -4,7 +4,7 @@ import { MAPS } from '../data/maps'
 import { chooseAIAction } from './ai'
 import {
   applyAction,
-  buildBoard,
+  boardFor,
   buildTargets,
   createGame,
   currentPlayerId,
@@ -27,7 +27,7 @@ describe('boards', () => {
   for (const map of MAPS) {
     for (const mode of GAME_MODES) {
       it(`${map.name} / ${mode.name} is connected and has markets`, () => {
-        const board = buildBoard(map, mode.mapSize)
+        const board = boardFor(map.id, mode.mapSize)
         expect(board.towns.filter((t) => t.market !== null).length).toBeGreaterThanOrEqual(2)
         // Every town reachable from the first over the route graph.
         const seen = new Set([board.towns[0].id])
@@ -47,21 +47,22 @@ describe('boards', () => {
   }
 
   it('smaller modes use fewer towns', () => {
-    const map = MAPS[0]
-    const sizes = (['full', 'reduced', 'compact'] as const).map((size) => buildBoard(map, size).towns.length)
-    expect(sizes[0]).toBeGreaterThan(sizes[1])
-    expect(sizes[1]).toBeGreaterThan(sizes[2])
+    for (const map of MAPS) {
+      const sizes = (['full', 'reduced', 'compact'] as const).map((size) => boardFor(map.id, size).towns.length)
+      expect(sizes[0]).toBeGreaterThan(sizes[1])
+      expect(sizes[1]).toBeGreaterThan(sizes[2])
+    }
   })
 })
 
 describe('building', () => {
   it('lets the first build go anywhere, then only in your network', () => {
     let g = newGame()
-    expect(buildTargets(g, 'mill').length).toBeGreaterThan(3)
-    g = applyAction(g, { type: 'build', kind: 'colliery', townId: 'lowford', slot: 0 })
-    const targets = buildTargets(g, 'mill')
+    expect(buildTargets(g, 'cotton').length).toBeGreaterThan(3)
+    g = applyAction(g, { type: 'build', kind: 'coal', townId: 'lowford', slot: 0 })
+    const targets = buildTargets(g, 'cotton')
     expect(targets.every((plot) => plot.townId === 'lowford')).toBe(true)
-    expect(() => applyAction(g, { type: 'build', kind: 'mill', townId: 'saltport', slot: 0 })).toThrow(
+    expect(() => applyAction(g, { type: 'build', kind: 'cotton', townId: 'saltport', slot: 0 })).toThrow(
       IllegalActionError,
     )
   })
@@ -70,7 +71,7 @@ describe('building', () => {
     const g = newGame()
     const player = g.players[0]
     expect(quote(player, { money: 6, coal: 0, iron: 1 }).total).toBe(6 + RULES.ironPrice)
-    const after = applyAction(g, { type: 'build', kind: 'mill', townId: 'lowford', slot: 1 })
+    const after = applyAction(g, { type: 'build', kind: 'cotton', townId: 'lowford', slot: 1 })
     expect(after.players[0].money).toBe(player.money - 6 - RULES.ironPrice)
     expect(after.players[0].prestige).toBe(2)
   })
@@ -78,29 +79,29 @@ describe('building', () => {
   it('uses stock before buying', () => {
     const g = newGame()
     g.players[0].iron = 1
-    const after = applyAction(g, { type: 'build', kind: 'mill', townId: 'lowford', slot: 1 })
+    const after = applyAction(g, { type: 'build', kind: 'cotton', townId: 'lowford', slot: 1 })
     expect(after.players[0].iron).toBe(0)
     expect(after.players[0].money).toBe(g.players[0].money - 6)
   })
 
   it('rejects a plot that does not allow the industry or is taken', () => {
     let g = newGame()
-    expect(() => applyAction(g, { type: 'build', kind: 'mill', townId: 'lowford', slot: 0 })).toThrow()
-    g = applyAction(g, { type: 'build', kind: 'colliery', townId: 'lowford', slot: 0 })
+    expect(() => applyAction(g, { type: 'build', kind: 'cotton', townId: 'lowford', slot: 0 })).toThrow()
+    g = applyAction(g, { type: 'build', kind: 'coal', townId: 'lowford', slot: 0 })
     g = applyAction(g, { type: 'raiseFunds' })
     // Player 2 can't take the same plot.
-    expect(() => applyAction(g, { type: 'build', kind: 'colliery', townId: 'lowford', slot: 0 })).toThrow()
+    expect(() => applyAction(g, { type: 'build', kind: 'coal', townId: 'lowford', slot: 0 })).toThrow()
   })
 })
 
 describe('links', () => {
   it('must touch your network and add prestige', () => {
     let g = newGame()
-    g = applyAction(g, { type: 'build', kind: 'colliery', townId: 'lowford', slot: 0 })
+    g = applyAction(g, { type: 'build', kind: 'coal', townId: 'lowford', slot: 0 })
     const reachable = linkTargets(g).map((r) => r.id)
     expect(reachable.every((id) => id.includes('lowford'))).toBe(true)
     g = applyAction(g, { type: 'link', routeId: 'saltport~lowford' })
-    expect(g.links['saltport~lowford']).toBe(0)
+    expect(g.links['saltport~lowford']).toEqual({ owner: 0, kind: 'canal' })
     expect(g.players[0].prestige).toBe(1 + RULES.linkPrestige)
     expect(networkTowns(g, 0).has('saltport')).toBe(true)
   })
@@ -113,11 +114,11 @@ describe('links', () => {
 })
 
 describe('shipping', () => {
-  /** P1 owns a mill with 2 goods in Lowford; P2 owns the canal to Saltport. */
+  /** P1 owns a cotton mill with 2 goods in Lowford; P2 owns the canal to Saltport. */
   function shippingSetup(): GameState {
     const g = newGame()
-    g.buildings.push({ id: 900, kind: 'mill', owner: 0, townId: 'lowford', slot: 1, goods: 2 })
-    g.links['saltport~lowford'] = 1
+    g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'lowford', slot: 1, goods: 2 })
+    g.links['saltport~lowford'] = { owner: 1, kind: 'canal' }
     return g
   }
 
@@ -138,8 +139,8 @@ describe('shipping', () => {
 
   it('doubles prestige over two or more links', () => {
     const g = shippingSetup()
-    g.links['ferrybridge~kingsferry'] = 0
-    g.links['saltport~ferrybridge'] = 0
+    g.links['ferrybridge~kingsferry'] = { owner: 0, kind: 'rail' }
+    g.links['saltport~ferrybridge'] = { owner: 0, kind: 'canal' }
     const q = shipQuotes(g, 900).find((option) => option.marketId === 'kingsferry')!
     expect(q.routeIds).toHaveLength(3)
     expect(q.prestige).toBe(2 * 2)
@@ -147,13 +148,13 @@ describe('shipping', () => {
 
   it('cannot reach markets without built links', () => {
     const g = newGame()
-    g.buildings.push({ id: 900, kind: 'mill', owner: 0, townId: 'lowford', slot: 1, goods: 1 })
+    g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'lowford', slot: 1, goods: 1 })
     expect(shipQuotes(g, 900)).toEqual([])
   })
 
   it('can sell in its own market town without links', () => {
     const g = newGame()
-    g.buildings.push({ id: 900, kind: 'mill', owner: 0, townId: 'saltport', slot: 0, goods: 1 })
+    g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'saltport', slot: 0, goods: 1 })
     const q = shipQuotes(g, 900)
     expect(q.map((option) => option.marketId)).toEqual(['saltport'])
     expect(q[0].prestige).toBe(1)
@@ -177,8 +178,8 @@ describe('rounds', () => {
   it('produces at the end of each round', () => {
     let g = newGame()
     g.buildings.push(
-      { id: 901, kind: 'colliery', owner: 0, townId: 'lowford', slot: 0, goods: 0 },
-      { id: 902, kind: 'mill', owner: 0, townId: 'lowford', slot: 1, goods: 3 },
+      { id: 901, kind: 'coal', owner: 0, townId: 'lowford', slot: 0, goods: 0 },
+      { id: 902, kind: 'cotton', owner: 0, townId: 'lowford', slot: 1, goods: 3 },
       { id: 903, kind: 'works', owner: 1, townId: 'saltport', slot: 1, goods: 0 },
     )
     g.players[0].coal = RULES.storeCap
@@ -188,14 +189,14 @@ describe('rounds', () => {
     g = applyAction(g, { type: 'endTurn' })
     expect(g.players[0].coal).toBe(RULES.storeCap)
     expect(g.players[0].money).toBe(money[0] + RULES.baseIncome + RULES.coalOverflowValue)
-    expect(g.buildings.find((b) => b.id === 902)!.goods).toBe(RULES.millCapacity)
+    expect(g.buildings.find((b) => b.id === 902)!.goods).toBe(RULES.goodsCapacity)
     expect(g.players[1].prestige).toBe(1)
     expect(g.prices.saltport).toBe(3)
   })
 
   it('finishes after the last round with ranked scores', () => {
     let g = createGame({ mapId: 'pennine-mills', modeId: 'bullet', seats: seats(2), seed: 1 })
-    g.buildings.push({ id: 900, kind: 'mill', owner: 1, townId: 'millbrook', slot: 0, goods: 0 })
+    g.buildings.push({ id: 900, kind: 'cotton', owner: 1, townId: 'millbrook', slot: 0, goods: 0 })
     while (g.status === 'playing') g = applyAction(g, { type: 'endTurn' })
     expect(g.round).toBe(g.totalRounds)
     expect(g.scores).not.toBeNull()

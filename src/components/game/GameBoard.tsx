@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { MapBoardData } from '../../data/maps'
+import { makesGoods } from '../../game/engine'
 import { INDUSTRIES } from '../../game/rules'
 import type { Board, Building, BoardTown, GameState, IndustryKind } from '../../game/types'
 import { INDUSTRY_GLYPHS, seatColor } from './glyphs'
@@ -122,17 +123,18 @@ export function GameBoard({
       {board.routes.map((route) => {
         const a = towns.get(route.from)!
         const b = towns.get(route.to)!
-        const owner = game.links[route.id]
+        const owner = game.links[route.id]?.owner
         const built = owner !== undefined
+        const routeKind = route.kinds[0]
         const label = highlights.routes?.get(route.id)
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-        const name = `${a.name} to ${b.name} ${route.kind === 'canal' ? 'canal' : 'railway'}`
+        const name = `${a.name} to ${b.name} ${routeKind === 'canal' ? 'canal' : 'railway'}`
         return (
           <g key={route.id}>
-            {!built && route.kind === 'canal' && (
+            {!built && routeKind === 'canal' && (
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="stroke-verdigris-400/45" strokeWidth={0.6} strokeDasharray="1.4 1.1" />
             )}
-            {!built && route.kind === 'rail' && (
+            {!built && routeKind === 'rail' && (
               <g className="stroke-parchment-300/30">
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={1.6} strokeDasharray="0.25 1.2" />
                 <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={0.35} />
@@ -140,11 +142,11 @@ export function GameBoard({
             )}
             {built && (
               <g style={{ color: seatColor(owner) }} stroke="currentColor">
-                {route.kind === 'rail' && (
+                {routeKind === 'rail' && (
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={2.4} strokeDasharray="0.35 1" opacity={0.85} />
                 )}
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={route.kind === 'rail' ? 0.9 : 1.6} />
-                {route.kind === 'canal' && (
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={routeKind === 'rail' ? 0.9 : 1.6} />
+                {routeKind === 'canal' && (
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="stroke-verdigris-300" strokeWidth={0.45} />
                 )}
               </g>
@@ -193,7 +195,7 @@ export function GameBoard({
                 <CostTag x={mid.x} y={mid.y} text={label} />
               </g>
             )}
-            <title>{`${a.name} – ${b.name} (${route.kind === 'canal' ? 'canal' : 'railway'}${built ? `, ${game.players[owner].name}` : ''})`}</title>
+            <title>{`${a.name} – ${b.name} (${routeKind === 'canal' ? 'canal' : 'railway'}${built ? `, ${game.players[owner].name}` : ''})`}</title>
           </g>
         )
       })}
@@ -327,7 +329,7 @@ function Plot({ town, slot, allowed, building, clickable, millPick, selectedMill
       <g style={{ color: seatColor(building.owner) }}>
         <rect x={x} y={y} width={PLOT} height={PLOT} rx={0.8} fill="currentColor" fillOpacity={0.22} stroke="currentColor" strokeWidth={0.4} />
         <Glyph kind={building.kind} x={x + 0.6} y={y + 0.6} size={PLOT - 1.2} />
-        {building.kind === 'mill' && building.goods > 0 && (
+        {makesGoods(building.kind) && building.goods > 0 && (
           <g>
             <circle cx={x + PLOT} cy={y} r={1.35} className="fill-brass-300 stroke-soot-950" strokeWidth={0.3} />
             <text x={x + PLOT} y={y + 0.8} textAnchor="middle" className="fill-soot-950 font-display font-extrabold" fontSize={2.1}>
@@ -365,7 +367,7 @@ function Plot({ town, slot, allowed, building, clickable, millPick, selectedMill
   }
 
   const label = building
-    ? `${INDUSTRIES[building.kind].name} in ${town.name}, owned by ${ownerName(building)}${building.kind === 'mill' ? `, ${building.goods} goods` : ''}`
+    ? `${INDUSTRIES[building.kind].name} in ${town.name}, owned by ${ownerName(building)}${makesGoods(building.kind) ? `, ${building.goods} goods` : ''}`
     : `Empty plot in ${town.name} for a ${allowedNames}`
 
   const interactive = clickable || pickable
