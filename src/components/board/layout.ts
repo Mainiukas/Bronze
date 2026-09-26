@@ -53,18 +53,18 @@ const PLATE_PAD = 9
 
 export const STOP_H = 22
 const STOP_PAD = 12
-export const EMBLEM_R = 5
+/** The two hex_link emblems on stops and hubs: 18 × 18, 3 apart, centred on the top edge and overlapping it by 5. */
+export const HEX = 18
+const HEX_GAP = 3
+const HEX_OVERLAP = 5
 
 export const MEDALLION_R = 32
 export const IRON_RING = 4
-export const HUB_SLOT_W = 34
-export const HUB_SLOT_H = 20
-const HUB_SLOT_GAP = 4
 export const RIBBON_H = 18
 export const RIBBON_TAIL = 9
-export const BADGE = 16
-export const BONUS_R = 9
-export const BUY_ICON = 10
+/** The square badge with the hub's current price, left of the medallion. */
+export const PRICE_BADGE = 20
+export const BUY_ICON = 12
 const BUY_GAP = 2
 
 export const RAIL_BADGE_R = 8
@@ -87,11 +87,9 @@ export const boardFont = (size: number, weight: number) => `${weight} ${size}px 
 export const TRACK_H: Record<Era, number> = { canal: 12, rail: 14 }
 export const TEXTURE_PIECE: Record<Era, number> = { canal: (1639 * 12) / 256, rail: (1084 * 14) / 256 }
 
-/** Empty link space (a flat hexagon) and a built link's token. */
-export const LINK_W = 40
-export const LINK_H = 22
-export const TOKEN_W = 44
-export const TOKEN_H = 18
+/** A link's bubble (empty) and its token (built): the same 480 × 200 artwork, drawn 52 wide. */
+export const BUBBLE_W = 52
+export const BUBBLE_H = (BUBBLE_W * 200) / 480
 
 /** Routes stop this far short of a plaque or tile group. */
 export const TRIM = 4
@@ -101,16 +99,18 @@ export const MIN_GAP = 8
 export const FAN = 18
 /** Extra room kept between two routes' textures. */
 const ROUTE_CLEAR = 2
-/** A link space or token, as a capsule: spine half-length and radius (covers 44 × 22). */
-const SPACE_SPINE = TOKEN_W / 2 - LINK_H / 2
-const SPACE_R = LINK_H / 2
+/** A link bubble or token, as a capsule: spine half-length and radius (covers 52 × 21.7). */
+const SPACE_SPINE = BUBBLE_W / 2 - BUBBLE_H / 2
+const SPACE_R = BUBBLE_H / 2
 /**
- * Room linked groups need between them along the line joining them: the link
- * space or token, a gap on each side, and slack for routes arriving at an angle.
+ * Room linked groups need between them along the line joining them: the
+ * bubble or token, a gap on each side, and slack for routes arriving at an angle.
  */
-const LINK_GAP = TOKEN_W + 2 * MIN_GAP + 12
+const LINK_GAP = BUBBLE_W + 2 * MIN_GAP + 4
 /** Groups stay this far inside the board edge. */
 const EDGE = 4
+/** Routes stay this far inside it (clear of the painted frame's outer rim). */
+const ROUTE_EDGE = 16
 
 /* ---- Types ---------------------------------------------------------------- */
 
@@ -118,6 +118,7 @@ type Solid = { type: 'rect'; rect: Rect } | { type: 'circle'; c: Point; r: numbe
 
 export interface CityParts {
   type: 'city'
+  /** One square per slot: a row for 1–2 slots, a triangle (2 over 1) for 3, 2 × 2 for 4. */
   tiles: Rect[]
   plate: Rect
 }
@@ -125,18 +126,20 @@ export interface CityParts {
 export interface StopParts {
   type: 'stop'
   plaque: Rect
-  emblems: Point[]
+  /** The two hex_link emblems on the top edge. */
+  hexes: Rect[]
 }
 
 export interface HubParts {
   type: 'hub'
   medallion: Point
-  /** The two merchant spaces (bounding boxes of the hexagons). */
-  slots: Rect[]
+  /** The two hex_link emblems on the medallion's top edge. */
+  hexes: Rect[]
   /** Ribbon body; the folded tails reach RIBBON_TAIL past each end. */
   ribbon: Rect
+  /** The current-price badge. */
   badge: Rect
-  bonus: Point
+  /** What the hub buys, under the ribbon. */
   icons: Rect[]
 }
 
@@ -201,14 +204,13 @@ function moveShape(shape: Shape, d: Point): Shape {
     parts.type === 'city'
       ? { ...parts, tiles: parts.tiles.map((r) => moveRect(r, d)), plate: moveRect(parts.plate, d) }
       : parts.type === 'stop'
-        ? { ...parts, plaque: moveRect(parts.plaque, d), emblems: parts.emblems.map((p) => movePoint(p, d)) }
+        ? { ...parts, plaque: moveRect(parts.plaque, d), hexes: parts.hexes.map((r) => moveRect(r, d)) }
         : {
             ...parts,
             medallion: movePoint(parts.medallion, d),
-            slots: parts.slots.map((r) => moveRect(r, d)),
+            hexes: parts.hexes.map((r) => moveRect(r, d)),
             ribbon: moveRect(parts.ribbon, d),
             badge: moveRect(parts.badge, d),
-            bonus: movePoint(parts.bonus, d),
             icons: parts.icons.map((r) => moveRect(r, d)),
           }
   return {
@@ -229,59 +231,54 @@ function rawShape(location: BoardLocation, measure: MeasureText): Shape {
 
   if (location.type === 'city') {
     const n = location.slots.length
-    const grid = n === 4
-    const blockW = grid ? TILE * 2 + TILE_GAP : n * TILE + (n - 1) * TILE_GAP
-    const blockH = grid ? TILE * 2 + TILE_GAP : TILE
+    // 1–2 slots: one row. 3: a triangle, two on top and one centred below. 4: 2 × 2.
+    const rows = n >= 3 ? 2 : 1
+    const rowW = (count: number) => count * TILE + (count - 1) * TILE_GAP
+    const blockW = rowW(rows === 2 ? 2 : n)
+    const blockH = rows * TILE + (rows - 1) * TILE_GAP
     const text = measure(name, boardFont(CITY_FONT, CITY_WEIGHT), CITY_FONT * CITY_TRACKING)
     const w = Math.max(blockW, Math.ceil(text + PLATE_PAD * 2))
     const left = (w - blockW) / 2
+    const step = TILE + TILE_GAP
     const tiles = Array.from({ length: n }, (_, i) =>
-      grid
-        ? { x: left + (i % 2) * (TILE + TILE_GAP), y: Math.floor(i / 2) * (TILE + TILE_GAP), w: TILE, h: TILE }
-        : { x: left + i * (TILE + TILE_GAP), y: 0, w: TILE, h: TILE },
+      rows === 1
+        ? { x: left + i * step, y: 0, w: TILE, h: TILE }
+        : n === 3 && i === 2
+          ? { x: left + step / 2, y: step, w: TILE, h: TILE }
+          : { x: left + (i % 2) * step, y: Math.floor(i / 2) * step, w: TILE, h: TILE },
     )
     const plate = { x: 0, y: blockH + PLATE_GAP, w, h: PLATE_H }
-    const block = { x: left, y: 0, w: blockW, h: blockH }
     const railBadge = railOnly ? { x: plate.x + plate.w - 1, y: plate.y + 1 } : null
     const solids: Solid[] = [
-      { type: 'rect', rect: block },
+      ...tiles.map((rect) => ({ type: 'rect' as const, rect })),
       { type: 'rect', rect: plate },
       ...(railBadge ? [{ type: 'circle' as const, c: railBadge, r: RAIL_BADGE_R }] : []),
     ]
-    const bounds = union([block, plate, ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
+    const bounds = union([...tiles, plate, ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
     return { parts: { type: 'city', tiles, plate }, bounds, railBadge, fontSize: CITY_FONT, solids }
   }
 
   if (location.type === 'stop') {
     const text = measure(name, boardFont(STOP_FONT, STOP_WEIGHT), STOP_FONT * STOP_TRACKING)
     const plaque = { x: 0, y: 0, w: Math.ceil(text + STOP_PAD * 2), h: STOP_H }
-    const emblems = [
-      { x: plaque.w / 2 - EMBLEM_R - 2, y: 0 },
-      { x: plaque.w / 2 + EMBLEM_R + 2, y: 0 },
-    ]
+    const hexes = hexPair(plaque.w / 2, 0)
     const railBadge = railOnly ? { x: plaque.w - 1, y: 1 } : null
     const solids: Solid[] = [
       { type: 'rect', rect: plaque },
-      ...emblems.map((c) => ({ type: 'circle' as const, c, r: EMBLEM_R })),
+      ...hexes.map((rect) => ({ type: 'rect' as const, rect })),
       ...(railBadge ? [{ type: 'circle' as const, c: railBadge, r: RAIL_BADGE_R }] : []),
     ]
-    const bounds = union([plaque, ...emblems.map((c) => circleBox(c, EMBLEM_R * 0.87)), ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
-    return { parts: { type: 'stop', plaque, emblems }, bounds, railBadge, fontSize: STOP_FONT, solids }
+    const bounds = union([plaque, ...hexes, ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
+    return { parts: { type: 'stop', plaque, hexes }, bounds, railBadge, fontSize: STOP_FONT, solids }
   }
 
-  // Hub: medallion at (0, 0), two merchant spaces on top, ribbon across the middle.
+  // Hub: medallion at (0, 0), two hexagons on top, ribbon across the middle, price badge to the left.
   const R = MEDALLION_R
   const text = measure(name, boardFont(HUB_FONT, HUB_WEIGHT), HUB_FONT * HUB_TRACKING)
   const ribbonW = Math.max(R * 2 + 20, Math.ceil(text + 26))
   const ribbon = { x: -ribbonW / 2, y: -RIBBON_H / 2 - 1, w: ribbonW, h: RIBBON_H }
-  const slots = [-1, 1].map((side) => ({
-    x: side * (HUB_SLOT_W / 2 + HUB_SLOT_GAP / 2) - HUB_SLOT_W / 2,
-    y: -R - HUB_SLOT_H + 5,
-    w: HUB_SLOT_W,
-    h: HUB_SLOT_H,
-  }))
-  const badge = { x: -R - 6 - BADGE / 2, y: ribbon.y - BADGE - 2, w: BADGE, h: BADGE }
-  const bonus = { x: 0, y: R + 5 }
+  const hexes = hexPair(0, -R)
+  const badge = { x: -R - PRICE_BADGE, y: ribbon.y - PRICE_BADGE - 3, w: PRICE_BADGE, h: PRICE_BADGE }
   const n = location.buys.length
   const iconsW = n * BUY_ICON + (n - 1) * BUY_GAP
   const icons = location.buys.map((_, i) => ({ x: -iconsW / 2 + i * (BUY_ICON + BUY_GAP), y: ribbon.y + ribbon.h + 3, w: BUY_ICON, h: BUY_ICON }))
@@ -290,13 +287,17 @@ function rawShape(location: BoardLocation, measure: MeasureText): Shape {
   const solids: Solid[] = [
     { type: 'circle', c: { x: 0, y: 0 }, r: R + 1 },
     { type: 'rect', rect: tails },
-    ...slots.map((rect) => ({ type: 'rect' as const, rect })),
+    ...hexes.map((rect) => ({ type: 'rect' as const, rect })),
     { type: 'rect', rect: badge },
-    { type: 'circle', c: bonus, r: BONUS_R },
     ...(railBadge ? [{ type: 'circle' as const, c: railBadge, r: RAIL_BADGE_R }] : []),
   ]
-  const bounds = union([circleBox({ x: 0, y: 0 }, R + 1), tails, ...slots, badge, circleBox(bonus, BONUS_R), ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
-  return { parts: { type: 'hub', medallion: { x: 0, y: 0 }, slots, ribbon, badge, bonus, icons }, bounds, railBadge, fontSize: HUB_FONT, solids }
+  const bounds = union([circleBox({ x: 0, y: 0 }, R + 1), tails, ...hexes, badge, ...(railBadge ? [circleBox(railBadge, RAIL_BADGE_R)] : [])])
+  return { parts: { type: 'hub', medallion: { x: 0, y: 0 }, hexes, ribbon, badge, icons }, bounds, railBadge, fontSize: HUB_FONT, solids }
+}
+
+/** Two HEX squares, HEX_GAP apart, centred on (cx, top) and overlapping that edge by HEX_OVERLAP. */
+function hexPair(cx: number, top: number): Rect[] {
+  return [-1, 1].map((side) => ({ x: cx + side * (HEX / 2 + HEX_GAP / 2) - HEX / 2, y: top + HEX_OVERLAP - HEX, w: HEX, h: HEX }))
 }
 
 /** Distance from p to the nearest shape the group draws (0 inside). */
@@ -366,13 +367,16 @@ function relax(bodies: Body[], linked: Set<string>, links: [number, number][], a
     if (!a.fixed) a.center = { x: a.center.x - d.x * share, y: a.center.y - d.y * share }
     if (!b.fixed) b.center = { x: b.center.x + d.x * share, y: b.center.y + d.y * share }
   }
-  const ITERATIONS = 1200
-  const SPRING_UNTIL = 400
+  const ITERATIONS = 1600
+  const SPRING_UNTIL = 900
+  const PULL = 0.04
   for (let iter = 0; iter < ITERATIONS; iter++) {
     const before = bodies.map((b) => b.center)
-    // A gentle pull back towards each location's own point keeps groups near their towns.
+    // A pull back towards each location's own point keeps groups near their towns. It fades out,
+    // so the pushes apart get the last word and everything ends up clear.
     if (iter < SPRING_UNTIL) {
-      for (const b of bodies) if (!b.fixed) b.center = { x: b.point.x + (b.center.x - b.point.x) * 0.96, y: b.point.y + (b.center.y - b.point.y) * 0.96 }
+      const keep = 1 - PULL * (1 - iter / SPRING_UNTIL)
+      for (const b of bodies) if (!b.fixed) b.center = { x: b.point.x + (b.center.x - b.point.x) * keep, y: b.point.y + (b.center.y - b.point.y) * keep }
     }
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < bodies.length; j++) {
@@ -616,6 +620,10 @@ class Costs {
     const half = route.width / 2
     const [ga, gb] = route.groups
     const m = spine(c.marker.point, c.marker.tangent)
+    for (const p of c.coarse.points) {
+      const out = Math.max(ROUTE_EDGE - p.x, p.x - (1000 - ROUTE_EDGE), ROUTE_EDGE - p.y, p.y - (1000 - ROUTE_EDGE), 0)
+      cost += out * 6
+    }
     for (const g of this.groups) {
       if (!boxesNear(g.bounds, c.box, half + MIN_GAP + SPACE_R)) continue
       const own = g === ga || g === gb
@@ -736,6 +744,9 @@ function untangle(placed: Placed[], costs: Costs) {
   }
 }
 
+/** Where along a route its bubble may sit: the middle first, then further out on either side. */
+const SLIDE = [0.5, ...Array.from({ length: 16 }, (_, i) => 0.5 + (i % 2 ? 1 : -1) * 0.025 * Math.ceil((i + 1) / 2))]
+
 /**
  * Lay out the routes that exist in an era: ends, bends and link spaces.
  * `quick` (while dragging in the editor) skips the slower refinements.
@@ -778,7 +789,7 @@ export function layoutRoutes(board: BoardData, groupsLayout: GroupsLayout, era: 
     const c = route.options[route.choice]
     const others = placed.filter((r) => r !== route).map((r) => r.options[r.choice].coarse)
     let best = { bad: Infinity, point: c.marker.point, tangent: c.marker.tangent }
-    for (const f of [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7]) {
+    for (const f of SLIDE) {
       const at = pointAtLength(c.line, c.line.total * f)
       const s = spine(at.point, at.tangent)
       let bad = 0
@@ -813,6 +824,10 @@ function routeProblems(era: Era, routes: RouteLayout[], groups: GroupLayout[]): 
     return spine(r.marker, { x: Math.cos(rad), y: Math.sin(rad) })
   })
   routes.forEach((route, i) => {
+    const half = route.width / 2
+    if (route.line.points.some((p) => p.x < half || p.y < half || p.x > 1000 - half || p.y > 1000 - half)) {
+      problems.push(`${era}: ${route.link.id} leaves the board`)
+    }
     for (const g of groups) {
       const nearest = Math.min(...spines[i].map((p) => distanceToGroup(g, p))) - SPACE_R
       if (nearest < MIN_GAP - 0.05) problems.push(`${era}: link space of ${route.link.id} is ${round(nearest)} from ${g.location.id}`)
@@ -861,29 +876,35 @@ export interface BoardLayout {
 /**
  * The whole layout: groups, then both eras' routes. Where a route still runs
  * into a group, or a link space sits too close to one, that group steps aside
- * and the layout is redone (a few passes at most). Groups are shared by both
- * eras, so the board doesn't shift when the era changes.
+ * and the layout is redone (a few passes at most). Each pass can also make
+ * things worse elsewhere, so the best pass wins: fewest problems, then the
+ * least drift of groups from their towns. Groups are shared by both eras, so
+ * the board doesn't shift when the era changes.
  */
 export function layoutBoard(board: BoardData, measure: MeasureText, options: { quick?: boolean; eras?: Era[] } = {}): BoardLayout {
   const eras = options.eras ?? (['canal', 'rail'] as const)
-  const passes = options.quick ? 1 : 3
+  const passes = options.quick ? 1 : 5
   let avoid: Avoid[] = []
-  let result: BoardLayout | null = null
+  let best: { layout: BoardLayout; drift: number } | null = null
   for (let pass = 0; pass < passes; pass++) {
     const groups = layoutGroups(board, measure, avoid)
     const routes = eras.map((era) => layoutRoutes(board, groups, era, options.quick))
-    result = {
+    const layout: BoardLayout = {
       groups: groups.groups,
       routes: Object.fromEntries(routes.map((r) => [r.era, r])),
       problems: [...groups.problems, ...routes.flatMap((r) => r.problems)],
     }
-    if (!result.problems.length) break
+    const drift = [...groups.groups.values()].reduce((sum, g) => sum + distance(g.center, g.point), 0)
+    if (!best || layout.problems.length < best.layout.problems.length || (layout.problems.length === best.layout.problems.length && drift < best.drift)) {
+      best = { layout, drift }
+    }
+    if (!layout.problems.length) break
     const all = [...groups.groups.values()]
     const more = routes.flatMap((r) => blockers([...r.routes.values()], all))
     if (!more.length) break
     avoid = [...avoid, ...more]
   }
-  return result!
+  return best!.layout
 }
 
 /** Midpoints of each curve segment: where the editor offers to add a bend point. */

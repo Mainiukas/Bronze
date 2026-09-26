@@ -1,19 +1,28 @@
 import type { GameModeId } from '../data/gameModes'
 import type { MapId } from '../data/maps'
 
-/** Bump when GameState's shape changes, so old saves are discarded. */
-export const GAME_VERSION = 4
+/** Bump when GameState's shape changes, so old saves are recognised and not resumed. */
+export const GAME_VERSION = 5
 
 /** The five industries: the game has exactly these. */
 export type IndustryKind = 'cotton' | 'port' | 'shipyard' | 'iron' | 'coal'
+/** What can be shipped and sold: cotton from mills, coal and iron from a player's store. */
+export type GoodsKind = 'cotton' | 'coal' | 'iron'
 export type RouteKind = 'canal' | 'rail'
 export type Era = 'canal' | 'rail'
+export type AILevel = 'easy' | 'normal' | 'hard'
 
-/** A place that buys goods. `buys` lists the producing industries whose goods it takes. */
+/** Player colours: the colours the built-link tokens come in. */
+export type PlayerColor = 'purple' | 'red' | 'yellow' | 'blue' | 'white'
+/** Default colour for each seat, in seat order. */
+export const PLAYER_COLORS: readonly PlayerColor[] = ['yellow', 'blue', 'purple', 'red', 'white']
+export const AI_LEVELS: readonly AILevel[] = ['easy', 'normal', 'hard']
+
+/** A place that buys goods (a trade hub, or a market town on a practice map). */
 export interface Market {
-  /** Starting price per goods (£). */
+  /** Starting (and highest) price per unit (£). */
   price: number
-  buys: IndustryKind[] | 'any'
+  buys: GoodsKind[]
 }
 
 export interface BoardTown {
@@ -50,6 +59,10 @@ export interface Board {
 export interface SeatSetup {
   name: string
   isAI: boolean
+  /** Computer players only; defaults to normal. */
+  aiLevel?: AILevel
+  /** Defaults to PLAYER_COLORS[seat]. Every player needs a different colour. */
+  color?: PlayerColor
 }
 
 export interface PlayerState {
@@ -57,12 +70,18 @@ export interface PlayerState {
   id: number
   name: string
   isAI: boolean
+  aiLevel: AILevel | null
+  color: PlayerColor
   money: number
   coal: number
   iron: number
   prestige: number
-  /** Total goods shipped this match (for stats and achievements). */
+  /** False until the player's first industry or link: until then they may build anywhere. */
+  hasBuilt: boolean
+  /** Units shipped this match (all goods). */
   goodsShipped: number
+  /** Links built this match, including canals later removed by the rail era. */
+  linksBuilt: number
 }
 
 export interface Building {
@@ -71,7 +90,7 @@ export interface Building {
   owner: number
   townId: string
   slot: number
-  /** Goods waiting to be shipped (goods-producing industries only). */
+  /** Cotton waiting at a mill (other industries keep 0). */
   goods: number
 }
 
@@ -84,7 +103,7 @@ export interface LinkState {
 export type GameAction =
   | { type: 'build'; kind: IndustryKind; townId: string; slot: number }
   | { type: 'link'; routeId: string }
-  /** `marketId` is a town id, or `port:<buildingId>` for a port. */
+  /** Ship from one of your mills, mines or iron works. `marketId` is a town id, or `port:<buildingId>` for a port. */
   | { type: 'ship'; buildingId: number; marketId: string }
   | { type: 'raiseFunds' }
   | { type: 'endTurn'; timedOut?: boolean }
@@ -93,13 +112,16 @@ export type GameAction =
 export type GameEvent =
   | { type: 'build'; player: number; townId: string; slot: number }
   | { type: 'link'; player: number; routeId: string }
-  | { type: 'ship'; player: number; fromTownId: string; marketId: string; marketTownId: string; routeIds: string[] }
+  | { type: 'ship'; player: number; goods: GoodsKind; amount: number; fromTownId: string; marketId: string; marketTownId: string; routeIds: string[] }
   | { type: 'raiseFunds'; player: number }
-  | { type: 'endTurn'; player: number }
+  | { type: 'endTurn'; player: number; timedOut: boolean }
+
+export type LogKind = 'build' | 'link' | 'ship' | 'funds' | 'turn' | 'round' | 'era' | 'reset' | 'end'
 
 export interface LogEntry {
   id: number
   round: number
+  kind: LogKind
   /** Acting player, or null for round events. */
   player: number | null
   text: string
@@ -110,9 +132,10 @@ export interface FinalScore {
   /** Prestige earned during play. */
   prestige: number
   moneyBonus: number
-  marketBonus: number
+  /** +2★ per hub (market) in the player's network. */
+  hubBonus: number
   total: number
-  /** 1 = winner. Ties share a rank. */
+  /** 1 = winner. Full ties share a rank. */
   rank: number
 }
 
@@ -125,7 +148,7 @@ export interface GameState {
   buildings: Building[]
   /** Built routes by route id. */
   links: Record<string, LinkState>
-  /** Current goods price per market town id. */
+  /** Current price per hub (market town) id. */
   prices: Record<string, number>
   /** 1-based. */
   round: number
@@ -134,6 +157,8 @@ export interface GameState {
   era: Era | null
   /** First round of the rail era, or null on boards without eras. */
   railEraRound: number | null
+  /** Set when the rail era began: its round and how many canal links came off the board. */
+  eraChange: { round: number; removed: number } | null
   /** Seats in play order for this round. */
   turnOrder: number[]
   turnIndex: number
@@ -142,8 +167,8 @@ export interface GameState {
   log: LogEntry[]
   lastEvent: GameEvent | null
   scores: FinalScore[] | null
-  /** Seed for the computer players' tie-breaking. */
+  /** The match seed: the computer players' choices follow from it. */
   seed: number
-  /** Counter for building and log ids. */
+  /** Counter for building and log ids; also advances with every action. */
   nextId: number
 }

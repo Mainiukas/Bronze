@@ -16,12 +16,27 @@ import {
   upright,
   pointAtLength,
 } from '../components/board/geometry'
-import { distanceToGroup, FAN, layoutBoard, MIN_GAP, TEXTURE_PIECE, TILE, TILE_GAP, TRACK_H, type RouteLayout } from '../components/board/layout'
+import {
+  BUBBLE_H,
+  BUBBLE_W,
+  distanceToGroup,
+  FAN,
+  HEX,
+  layoutBoard,
+  MEDALLION_R,
+  MIN_GAP,
+  TEXTURE_PIECE,
+  TILE,
+  TILE_GAP,
+  TRACK_H,
+  type RouteLayout,
+} from '../components/board/layout'
 import { createTextMeasurer } from '../components/board/measure'
 import {
   BOARD,
   BOARD_DESIGN,
   degrees,
+  HUB_GOODS,
   designProblems,
   formatBoardJson,
   INDUSTRY_IDS,
@@ -43,10 +58,24 @@ describe('board.json', () => {
     expect(BOARD.links).toHaveLength(39)
   })
 
-  it('uses only the five industries', () => {
+  it('uses only the five industries, and hubs buy only cotton, coal and iron', () => {
     expect([...INDUSTRY_IDS].sort()).toEqual(['coal', 'cotton', 'iron', 'port', 'shipyard'])
-    const used = new Set(BOARD.locations.flatMap((l) => (l.type === 'city' ? l.slots.flat() : l.type === 'hub' ? l.buys : [])))
+    const used = new Set(BOARD.locations.flatMap((l) => (l.type === 'city' ? l.slots.flat() : [])))
     expect([...used].sort()).toEqual(['coal', 'cotton', 'iron', 'port', 'shipyard'])
+    for (const l of BOARD.locations) if (l.type === 'hub') for (const goods of l.buys) expect(HUB_GOODS).toContain(goods)
+  })
+
+  it('has unique ids and every position within 0–100 %', () => {
+    const ids = [...BOARD.locations.map((l) => l.id), ...BOARD.links.map((l) => l.id)]
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const l of BOARD.locations) {
+      for (const v of [l.x, l.y]) {
+        expect(v).toBeGreaterThanOrEqual(0)
+        expect(v).toBeLessThanOrEqual(100)
+      }
+    }
+    const pairs = BOARD.links.map((l) => [l.from, l.to].sort().join('|'))
+    expect(new Set(pairs).size).toBe(39)
   })
 
   it('matches the design for a few spot checks', () => {
@@ -54,7 +83,10 @@ describe('board.json', () => {
     expect(at('lichfield')).toMatchObject({ type: 'city', slots: [['coal']], region: 'midlands' })
     expect(at('merthyr')).toMatchObject({ slots: [['iron'], ['iron'], ['coal']] })
     expect(at('bristol')).toMatchObject({ slots: [['cotton', 'port'], ['cotton', 'port'], ['cotton', 'iron'], ['coal']] })
-    expect(at('london')).toMatchObject({ buys: ['cotton', 'coal', 'iron', 'port', 'shipyard'], value: 12 })
+    expect(at('london')).toMatchObject({ type: 'hub', price: 7, buys: ['cotton', 'coal', 'iron'] })
+    expect(at('the_north')).toMatchObject({ type: 'hub', price: 6, buys: ['cotton', 'coal'], era: 'rail', ring: 1 })
+    expect(at('west_wales')).toMatchObject({ type: 'hub', price: 5, buys: ['cotton', 'coal'], ring: 2 })
+    for (const hub of BOARD.locations.filter((l) => l.type === 'hub')) expect('value' in hub).toBe(false)
     expect(BOARD.locations.filter((l) => l.era === 'rail').map((l) => l.id)).toEqual(['the_north', 'taunton', 'plymouth'])
     expect(BOARD.links.find((l) => l.id === 'the_north-stoke')?.type).toBe('rail')
   })
@@ -84,7 +116,8 @@ describe('board.json', () => {
         { id: 'y', from: 'stoke', to: 'the_north', type: 'both', points: [[1, 2], [3, 4], [5, 6], [7, 8]] },
       ],
     }
-    const errors = validateBoardData(broken).join('\n')
+    const withBadHub = { ...broken, locations: broken.locations.map((l) => (l.id === 'london' ? { ...l, value: 12, buys: ['cotton', 'port'] } : l)) }
+    const errors = validateBoardData(withBadHub).join('\n')
     expect(errors).toMatch(/nowhere: x and y/)
     expect(errors).toMatch(/unknown region "mars"/)
     expect(errors).toMatch(/known industries/)
@@ -92,6 +125,8 @@ describe('board.json', () => {
     expect(errors).toMatch(/x: type must be/)
     expect(errors).toMatch(/y: another link already joins/)
     expect(errors).toMatch(/y: points must be up to 3/)
+    expect(errors).toMatch(/london: a hub buys a list of cotton, coal, iron/)
+    expect(errors).toMatch(/london: hubs have no "value"/)
     expect(parseBoardData(broken)).toBeUndefined()
   })
 
@@ -138,10 +173,26 @@ describe('design checks', () => {
     expect(problems).toMatch(/5 canal links, expected 6/)
   })
 
-  it('5. no trace of the old industries or line-drawn industry icons in the code', () => {
-    const sources = import.meta.glob<string>('../**/*.{ts,tsx}', { eager: true, query: '?raw', import: 'default' })
+  it('5. no trace of the removed industries, drink tiles, merchant tiles, drawn industry icons or drawn link spaces in the code', () => {
+    const sources = import.meta.glob<string>('../**/*.{ts,tsx,css}', { eager: true, query: '?raw', import: 'default' })
     // Spelled in pieces, so that grepping the code for these words finds nothing at all.
-    const banned = new RegExp(['manu' + 'facturer', 'pot' + 'tery', 'BOARD_' + 'ICONS', 'INDUSTRY_' + 'GLYPHS', 'Engine ' + 'Works', "'wor" + "ks'"].join('|'), 'i')
+    const banned = new RegExp(
+      [
+        'manu' + 'facturer',
+        'pot' + 'tery',
+        'be' + 'er',
+        'bar' + 'rel',
+        'mer' + 'chant\\.png',
+        'MERCHANT' + '_URL',
+        'Hex' + 'Space',
+        'flat' + 'Hexagon',
+        'BOARD_' + 'ICONS',
+        'INDUSTRY_' + 'GLYPHS',
+        'Engine ' + 'Works',
+        "'wor" + "ks'",
+      ].join('|'),
+      'i',
+    )
     const offenders = Object.entries(sources)
       .filter(([, text]) => banned.test(text))
       .map(([path]) => path)
@@ -204,7 +255,7 @@ describe('curves and texture pieces', () => {
 })
 
 describe('board layout', () => {
-  const layout = layoutBoard(BOARD, createTextMeasurer(false))
+  const layout = layoutBoard(BOARD, createTextMeasurer())
   const groups = [...layout.groups.values()]
   const routes = (era: 'canal' | 'rail'): RouteLayout[] => [...layout.routes[era]!.routes.values()]
 
@@ -217,11 +268,12 @@ describe('board layout', () => {
       const list = routes(era)
       for (let i = 0; i < list.length; i++) {
         for (let j = i + 1; j < list.length; j++) expect(lineGap(list[i].line, list[j].line)).toBeGreaterThanOrEqual((list[i].width + list[j].width) / 2)
-        // Link spaces (and the tokens on them, 44 × 22) keep 8 clear of every group.
+        // Bubbles (and the tokens on them, 52 × 21.7) keep 8 clear of every group.
         const rad = (list[i].marker.angle * Math.PI) / 180
-        for (const k of [-11, 0, 11]) {
+        const r = BUBBLE_H / 2
+        for (const k of [-(BUBBLE_W / 2 - r), 0, BUBBLE_W / 2 - r]) {
           const p = { x: list[i].marker.x + Math.cos(rad) * k, y: list[i].marker.y + Math.sin(rad) * k }
-          for (const g of groups) expect(distanceToGroup(g, p) - 11).toBeGreaterThanOrEqual(MIN_GAP - 0.05)
+          for (const g of groups) expect(distanceToGroup(g, p) - r).toBeGreaterThanOrEqual(MIN_GAP - 0.05)
         }
       }
     }
@@ -261,23 +313,66 @@ describe('board layout', () => {
     expect(layout.groups.get('west_wales')!.bounds.x).toBeLessThan(10)
   })
 
-  it('uses 34-unit squares with 3-unit gaps, 2 × 2 for four slots, over a plate wide enough for the name', () => {
+  it('uses 34-unit squares with 3-unit gaps: a row for 1–2 slots, a triangle for 3, 2 × 2 for 4, over a plate wide enough for the name', () => {
     const city = (id: string) => {
       const g = layout.groups.get(id)!
       return g.parts.type === 'city' ? g.parts : null
     }
+    const step = TILE + TILE_GAP
     const birmingham = city('birmingham')!
-    expect(new Set(birmingham.tiles.map((t) => t.y)).size).toBe(2)
     expect(birmingham.tiles.every((t) => t.w === TILE && t.h === TILE)).toBe(true)
+    expect(birmingham.tiles.map((t) => [t.x - birmingham.tiles[0].x, t.y - birmingham.tiles[0].y])).toEqual([[0, 0], [step, 0], [0, step], [step, step]])
+    // Stoke (3 slots): slot 0 top-left, 1 top-right, 2 centred below, like Preston.
     const stoke = city('stoke')!
-    expect(new Set(stoke.tiles.map((t) => t.y)).size).toBe(1)
-    expect(stoke.tiles[1].x - stoke.tiles[0].x).toBe(TILE + TILE_GAP)
-    const measure = createTextMeasurer(false)
+    expect(stoke.tiles.map((t) => [t.x - stoke.tiles[0].x, t.y - stoke.tiles[0].y])).toEqual([[0, 0], [step, 0], [step / 2, step]])
+    const derby = city('derby')!
+    expect(derby.tiles.map((t) => [t.x - derby.tiles[0].x, t.y - derby.tiles[0].y])).toEqual([[0, 0], [step, 0]])
+    for (const g of groups) {
+      if (g.parts.type !== 'city') continue
+      // The plate sits under the tiles.
+      expect(g.parts.plate.y).toBeGreaterThan(Math.max(...g.parts.tiles.map((t) => t.y + t.h)))
+    }
+    const measure = createTextMeasurer()
     for (const g of groups) {
       if (g.parts.type !== 'city') continue
       const tilesWidth = Math.max(...g.parts.tiles.map((t) => t.x + t.w)) - Math.min(...g.parts.tiles.map((t) => t.x))
       expect(g.parts.plate.w).toBeGreaterThanOrEqual(tilesWidth)
       expect(g.parts.plate.w).toBeGreaterThanOrEqual(measure(g.location.name.toUpperCase(), '700 13.5px Cinzel', 13.5 * 0.06))
+    }
+  })
+
+  it('puts exactly two 18 × 18 link hexagons, 3 apart, on the top edge of every stop and hub (5 overlapping)', () => {
+    for (const g of groups) {
+      if (g.parts.type === 'city') continue
+      const hexes = g.parts.hexes
+      expect(hexes).toHaveLength(2)
+      expect(hexes.every((h) => h.w === HEX && h.h === HEX)).toBe(true)
+      expect(hexes[1].x - (hexes[0].x + HEX)).toBeCloseTo(3)
+      const top = g.parts.type === 'stop' ? g.parts.plaque.y : g.parts.medallion.y - MEDALLION_R
+      const centre = g.parts.type === 'stop' ? g.parts.plaque.x + g.parts.plaque.w / 2 : g.parts.medallion.x
+      for (const h of hexes) expect(h.y + h.h - top).toBeCloseTo(5)
+      expect((hexes[0].x + hexes[1].x + HEX) / 2).toBeCloseTo(centre)
+    }
+    // Hubs: a square price badge left of the medallion, and the goods they buy below the ribbon.
+    for (const id of ['the_north', 'london', 'west_wales']) {
+      const parts = layout.groups.get(id)!.parts
+      if (parts.type !== 'hub') throw new Error(id)
+      expect(parts.badge.w).toBe(parts.badge.h)
+      expect(parts.badge.x + parts.badge.w).toBeLessThanOrEqual(parts.medallion.x - MEDALLION_R + 0.01)
+      expect(parts.icons.every((r) => r.y >= parts.ribbon.y + parts.ribbon.h)).toBe(true)
+    }
+  })
+
+  it('never lets a hub cover a city, and draws the rail-era badge only on The North, Plymouth and Taunton', () => {
+    for (const hub of groups.filter((g) => g.location.type === 'hub')) {
+      for (const city of groups.filter((g) => g.location.type === 'city')) expect(rectGap(hub.bounds, city.bounds)).toBeGreaterThanOrEqual(MIN_GAP - 0.05)
+    }
+    expect(groups.filter((g) => g.railBadge).map((g) => g.location.id)).toEqual(['the_north', 'taunton', 'plymouth'])
+  })
+
+  it('keeps every route on the board', () => {
+    for (const era of ['canal', 'rail'] as const) {
+      for (const r of routes(era)) for (const p of r.line.points) expect(Math.min(p.x, p.y, 1000 - p.x, 1000 - p.y)).toBeGreaterThanOrEqual(r.width / 2)
     }
   })
 
@@ -287,7 +382,7 @@ describe('board layout', () => {
       locations: BOARD.locations.map((l) => (l.id === 'exeter' ? { ...l, labelOffset: { x: 2, y: -1.5 } } : l)),
       links: BOARD.links.map((l) => (l.id === 'merthyr-barnstaple' ? { ...l, points: [[30, 52]] } : l)),
     }
-    const result = layoutBoard(edited, createTextMeasurer(false), { quick: true, eras: ['canal'] })
+    const result = layoutBoard(edited, createTextMeasurer(), { quick: true, eras: ['canal'] })
     const g = result.groups.get('exeter')!
     expect(g.center.x - g.point.x).toBeCloseTo(20)
     expect(g.center.y - g.point.y).toBeCloseTo(-15)

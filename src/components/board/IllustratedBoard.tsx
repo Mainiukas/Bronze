@@ -14,7 +14,7 @@ import {
 import { seatColor, SEATS } from '../game/glyphs'
 import { hubPhotoUrl, imageOk, MAP_URL, TEXTURE_URLS, TOKEN_URLS, useBoardImagesReady, type TokenColor } from './assets'
 import { BoardTooltip, type TooltipTarget } from './BoardTooltip'
-import { cubicPath, inflate, polylinePath, roundPercent, texturePieces, toPercent, toView, type Point, type Rect, type TexturePiece } from './geometry'
+import { cubicPath, inflate, polyline, polylinePath, roundPercent, texturePieces, toPercent, toView, type Point, type Rect, type TexturePiece } from './geometry'
 import {
   boardFont,
   CITY_FONT,
@@ -34,13 +34,11 @@ import {
 import { createTextMeasurer, useFontsReady, type MeasureText } from './measure'
 import {
   BoardDefs,
-  GoodsBadge,
-  HubBadges,
   HubGroup,
-  LinkSpace,
+  LinkBubble,
   LinkToken,
   NamePlate,
-  PriceTag,
+  PriceBadge,
   RailEraBadge,
   RouteShadow,
   RouteStroke,
@@ -74,8 +72,9 @@ export interface BoardRecent {
   slot?: string
   link?: string
   location?: string
-  /** Links goods travelled along. */
+  /** Links goods travelled along, in order from `from`: a dot runs along them. */
   path?: readonly string[]
+  from?: string
 }
 
 export interface IllustratedBoardProps {
@@ -88,6 +87,8 @@ export interface IllustratedBoardProps {
   selected?: BoardSelection | null
   playerColor?: (player: number) => string
   playerName?: (player: number) => string
+  /** A letter per player, drawn on their tiles and tokens (the colour-blind aid). */
+  playerMark?: (player: number) => string | undefined
   onSelectLocation?: (locationId: string) => void
   onSelectSlot?: (locationId: string, slotIndex: number) => void
   onSelectLink?: (linkId: string) => void
@@ -103,6 +104,8 @@ export interface IllustratedBoardProps {
   /** Outline these locations in a player's colour (their network). */
   network?: { locations: ReadonlySet<string>; color: string } | null
   recent?: BoardRecent | null
+  /** Multiplies the length of board animations (the animation-speed setting); 0 turns the moving dot off. */
+  motion?: number
   className?: string
 }
 
@@ -112,7 +115,8 @@ type Drag = DragTarget & { start: Point; at: Point }
 type EditFocus = { type: 'point' | 'group'; id: string } | { type: 'bend'; linkId: string; index: number }
 
 const FONTS = [boardFont(CITY_FONT, CITY_WEIGHT), boardFont(STOP_FONT, STOP_WEIGHT), boardFont(HUB_FONT, HUB_WEIGHT)]
-const CLOSED_OPACITY = { link: 0.15, location: 0.35 }
+/** Locations outside the mode's rings, and their links, are drawn at 35 %. */
+const CLOSED_OPACITY = { link: 0.35, location: 0.35 }
 
 /** Token art for a player colour, if the colour is one the tokens come in. */
 function tokenColor(color: string): TokenColor | undefined {
@@ -161,7 +165,11 @@ function asButton(label: string, onActivate: () => void) {
   }
 }
 
-const slotLabel = (name: string, index: number, allowed: Industry[]) => `${name} slot ${index + 1}: ${allowed.map((a) => INDUSTRY_NAMES[a]).join(' or ')}`
+/** "Birmingham, slot 3: cotton mill or iron works, free" */
+function slotLabel(name: string, index: number, allowed: Industry[], owner: string | null, built?: Industry): string {
+  const kinds = allowed.map((a) => INDUSTRY_NAMES[a].toLowerCase()).join(' or ')
+  return `${name}, slot ${index + 1}: ${kinds}, ${built && owner ? `built: ${owner}’s ${INDUSTRY_NAMES[built].toLowerCase()}` : 'free'}`
+}
 
 /**
  * The illustrated map board: the painted map with an SVG overlay (viewBox
@@ -181,6 +189,7 @@ export function IllustratedBoard({
   selected = null,
   playerColor = seatColor,
   playerName = (player) => `Player ${player + 1}`,
+  playerMark,
   onSelectLocation,
   onSelectSlot,
   onSelectLink,
@@ -191,6 +200,7 @@ export function IllustratedBoard({
   closed,
   network = null,
   recent = null,
+  motion = 1,
   className = '',
 }: IllustratedBoardProps) {
   const imagesReady = useBoardImagesReady()
@@ -201,8 +211,9 @@ export function IllustratedBoard({
   /** Last item moved in the editor; its values stay on screen. */
   const [editFocus, setEditFocus] = useState<EditFocus | null>(null)
 
-  // Plaques are sized to their names, measured once Cinzel has loaded (the board waits for it).
-  const measure = useMemo(() => createTextMeasurer(fontsReady), [fontsReady])
+  // Plaques are sized to their names from Cinzel's glyph widths, so the layout never waits for the font
+  // (the board still waits before drawing, so labels don't flash in another font).
+  const measure = useMemo(() => createTextMeasurer(), [])
   // Both eras are laid out together, so switching era is instant and the towns don't move.
   // Editor drags only preview; the board is laid out again when they're released.
   const layout = useMemo(() => (fontsReady ? cachedLayout(board, measure) : null), [board, measure, fontsReady])
@@ -248,7 +259,14 @@ export function IllustratedBoard({
   const recentPath = new Set(recent?.path ?? [])
   const isShut = (id: string) => closed?.has(id) ?? false
   const routeShut = (route: RouteLayout) => isShut(route.link.from) || isShut(route.link.to)
-  const linkLabel = (route: RouteLayout) => `${name(route.link.from)} to ${name(route.link.to)} (${era === 'canal' ? 'canal' : 'railway'})`
+  const linkLabel = (route: RouteLayout, extra?: string | null) =>
+    `${name(route.link.from)} to ${name(route.link.to)} (${era === 'canal' ? 'canal' : 'railway'})${extra ? `: ${extra}` : ''}`
+  const labelForSlot = (locationId: string, index: number) => {
+    const location = locations.get(locationId)
+    if (location?.type !== 'city') return locationId
+    const tile = built.slots[slotKey(locationId, index)]
+    return slotLabel(location.name, index, location.slots[index] ?? [], tile ? playerName(tile.player) : null, tile?.industry)
+  }
 
   // Links to glow: this era's links touching the hovered or selected location, or the hovered/selected link.
   const glow = new Map<string, boolean>()
@@ -460,6 +478,9 @@ export function IllustratedBoard({
             .map((route) => (
               <path key={`${route.link.id}-${recent?.key}`} d={polylinePath(route.line)} className="board-flow-lg fill-none stroke-brass-200" strokeWidth={5} strokeLinecap="round" />
             ))}
+          {recent?.path?.length && recent.from && motion > 0 ? (
+            <ShipDot key={recent.key} d={shipPath(recent.path, recent.from, routesLayout.routes)} seconds={0.55 * recent.path.length * motion} />
+          ) : null}
         </g>
 
         {/* 3. Link spaces (empty) and 4. link tokens (built) */}
@@ -487,10 +508,20 @@ export function IllustratedBoard({
                     (() => {
                       const color = playerColor(owner.player)
                       const token = tokenColor(color)
-                      return <LinkToken x={marker.x} y={marker.y} angle={marker.angle} era={era} token={token && TOKEN_URLS[era][token]} color={color} />
+                      return (
+                        <LinkToken
+                          x={marker.x}
+                          y={marker.y}
+                          angle={marker.angle}
+                          era={era}
+                          token={token && TOKEN_URLS[era][token]}
+                          color={color}
+                          mark={playerMark?.(owner.player)}
+                        />
+                      )
                     })()
                   ) : (
-                    <LinkSpace x={marker.x} y={marker.y} angle={marker.angle} glow={hovered && clickable} />
+                    <LinkBubble x={marker.x} y={marker.y} angle={marker.angle} glow={hovered && clickable} />
                   )}
                   {recent?.link === link.id && (
                     <circle key={recent.key} cx={marker.x} cy={marker.y} r={24} className="board-flash fill-none stroke-brass-200" strokeWidth={3} />
@@ -526,12 +557,22 @@ export function IllustratedBoard({
                         key={key}
                         className={slotClickable ? 'cursor-pointer' : undefined}
                         {...(shut ? {} : hoverHandlers({ type: 'location', id: location.id, slot: index }))}
-                        {...(slotClickable ? asButton(slotLabel(location.name, index, allowed), () => onSelectSlot!(location.id, index)) : {})}
+                        {...(slotClickable ? asButton(labelForSlot(location.id, index), () => onSelectSlot!(location.id, index)) : {})}
                       >
                         <SlotTile
                           rect={parts.tiles[index]}
                           allowed={allowed}
-                          tile={tile ? { industry: tile.industry, color: playerColor(tile.player), level: tile.level } : null}
+                          tile={
+                            tile
+                              ? {
+                                  industry: tile.industry,
+                                  color: playerColor(tile.player),
+                                  stars: tile.stars,
+                                  goods: tile.industry === 'cotton' ? (tile.goods ?? 0) : undefined,
+                                  mark: playerMark?.(tile.player),
+                                }
+                              : null
+                          }
                         />
                       </g>
                     )
@@ -579,19 +620,10 @@ export function IllustratedBoard({
               <g key={location.id} opacity={isShut(location.id) ? CLOSED_OPACITY.location : 1} transform={dragShift(location.id)}>
                 {location.type === 'hub' && g.parts.type === 'hub' && (
                   <g pointerEvents="none">
-                    <HubBadges parts={g.parts} value={location.value} />
-                    {prices?.[location.id] !== undefined && (
-                      <PriceTag at={{ x: g.parts.ribbon.x + g.parts.ribbon.w - 6, y: g.parts.ribbon.y - 10 }} price={prices[location.id]} />
-                    )}
+                    <PriceBadge rect={g.parts.badge} price={prices?.[location.id] ?? location.price} />
                   </g>
                 )}
-                {g.railBadge && <RailEraBadge at={g.railBadge} />}
-                {location.type === 'city' &&
-                  g.parts.type === 'city' &&
-                  g.parts.tiles.map((rect, index) => {
-                    const goods = built.slots[slotKey(location.id, index)]?.goods
-                    return goods ? <GoodsBadge key={index} at={{ x: rect.x + rect.w - 2, y: rect.y + 2 }} goods={goods} /> : null
-                  })}
+                {g.railBadge && era === 'canal' && <RailEraBadge at={g.railBadge} />}
               </g>
             )
           })}
@@ -604,7 +636,9 @@ export function IllustratedBoard({
               const g = groups.get(id)
               if (!g) return null
               const box = inflate(g.bounds, 4)
-              return <rect key={`net-${id}`} x={box.x} y={box.y} width={box.w} height={box.h} rx={5} fill="none" stroke={network.color} strokeWidth={2} strokeDasharray="5 4" />
+              return (
+                <rect key={`net-${id}`} x={box.x} y={box.y} width={box.w} height={box.h} rx={10} fill="none" stroke={network.color} strokeWidth={2.2} strokeDasharray="6 4" />
+              )
             })}
           {targets?.slots &&
             [...targets.slots].map(([key, text]) => {
@@ -697,7 +731,7 @@ export function IllustratedBoard({
                   height={rect.h + 4}
                   fill="transparent"
                   className="cursor-pointer"
-                  {...asButton(slotLabel(location.name, Number(index), location.slots[Number(index)] ?? []), () => onSelectSlot?.(locationId, Number(index)))}
+                  {...asButton(`${labelForSlot(locationId, Number(index))}${targets.slots?.get(key) ? `. ${targets.slots.get(key)}` : ''}`, () => onSelectSlot?.(locationId, Number(index)))}
                   {...hoverHandlers({ type: 'location', id: locationId, slot: Number(index) })}
                 />
               )
@@ -716,7 +750,7 @@ export function IllustratedBoard({
                   rx={8}
                   fill="transparent"
                   className="cursor-pointer"
-                  {...asButton(name(id), () => onSelectLocation?.(id))}
+                  {...asButton(`${name(id)}${targets.locations?.get(id) ? `: ${targets.locations.get(id)}` : ''}`, () => onSelectLocation?.(id))}
                   {...hoverHandlers({ type: 'location', id })}
                 />
               )
@@ -726,11 +760,12 @@ export function IllustratedBoard({
               if (!route) return null
               const hovered = hover?.type === 'link' && hover.id === id
               return (
-                <g key={`hit-${id}`} className="cursor-pointer" {...asButton(linkLabel(route), () => onSelectLink?.(id))} {...hoverHandlers({ type: 'link', id })}>
-                  <circle cx={route.marker.x} cy={route.marker.y} r={22} fill="transparent" />
-                  <g className={hovered ? undefined : 'board-target'}>
-                    <LinkSpace x={route.marker.x} y={route.marker.y} angle={route.marker.angle} glow />
-                  </g>
+                <g key={`hit-${id}`} className="cursor-pointer" {...asButton(linkLabel(route, targets.links?.get(id)), () => onSelectLink?.(id))} {...hoverHandlers({ type: 'link', id })}>
+                  <circle cx={route.marker.x} cy={route.marker.y} r={24} fill="transparent" />
+                  <LinkBubble x={route.marker.x} y={route.marker.y} angle={route.marker.angle} glow />
+                  {hovered && (
+                    <circle cx={route.marker.x} cy={route.marker.y} r={27} fill="none" className="stroke-brass-200" strokeWidth={2} />
+                  )}
                 </g>
               )
             })}
@@ -868,5 +903,37 @@ function TargetTag({ x, y, text }: { x: number; y: number; text: string }) {
         {text}
       </text>
     </g>
+  )
+}
+
+/** One path through the shipped links, in travel order from `from` (each link's curve turned to match). */
+function shipPath(ids: readonly string[], from: string, routes: ReadonlyMap<string, RouteLayout>): string {
+  const points: Point[] = []
+  let at = from
+  for (const id of ids) {
+    const route = routes.get(id)
+    if (!route) continue
+    const forward = route.link.from === at
+    points.push(...(forward ? route.line.points : [...route.line.points].reverse()))
+    at = forward ? route.link.to : route.link.from
+  }
+  return points.length ? polylinePath(polyline(points)) : ''
+}
+
+/** The goods of the last shipment: a gold dot running along the links it used, then fading. */
+function ShipDot({ d, seconds }: { d: string; seconds: number }) {
+  const motion = useRef<SVGAnimateMotionElement>(null)
+  const fade = useRef<SVGAnimateElement>(null)
+  // Started by hand: an animation added after the SVG loaded would otherwise count from the page's start and be over already.
+  useEffect(() => {
+    motion.current?.beginElement()
+    fade.current?.beginElement()
+  }, [])
+  if (!d) return null
+  return (
+    <circle r={6.5} opacity={0} fill={BOARD_COLORS.gold} stroke={BOARD_COLORS.ink} strokeWidth={1.6} pointerEvents="none">
+      <animateMotion ref={motion} begin="indefinite" dur={`${seconds}s`} path={d} fill="freeze" />
+      <animate ref={fade} attributeName="opacity" begin="indefinite" dur={`${seconds + 0.4}s`} values="1;1;0" keyTimes="0;0.8;1" fill="freeze" />
+    </circle>
   )
 }

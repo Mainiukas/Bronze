@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   settings: 'bronze.settings',
   match: 'bronze.match',
   stats: 'bronze.stats',
+  /** Seats, names, colours and AI levels from the last new-game setup. */
+  setup: 'bronze.setup',
   /** Unsaved calibration from the map board editor. */
   boardDraft: 'bronze.boardDraft',
 } as const
@@ -23,6 +25,15 @@ export function readStorage(key: string): unknown {
     return raw === null ? undefined : (JSON.parse(raw) as unknown)
   } catch {
     return undefined
+  }
+}
+
+/** Remove a value. Failures are ignored. */
+export function removeStorage(key: string): void {
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Storage unavailable: nothing to remove.
   }
 }
 

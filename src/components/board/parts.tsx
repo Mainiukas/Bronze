@@ -4,30 +4,23 @@
  */
 
 import { INDUSTRY_SHORT, type Era, type HubLocation, type Industry } from '../../data/board'
-import { imageOk, INDUSTRY_ICON_URLS, LINK_SYMBOL_URL, MERCHANT_URL, TEXTURE_URLS, TOKEN_ART_URLS } from './assets'
-import { flatHexagonPath, upright, type Point, type Rect, type TexturePiece } from './geometry'
-import { BARREL_HOOPS, BARREL_SILHOUETTE, LOCOMOTIVE_SILHOUETTE } from './icons'
+import { HEX_LINK_URL, imageOk, INDUSTRY_ICON_URLS, LINK_SPACE_URL, LINK_SYMBOL_URL, TEXTURE_URLS, TOKEN_ART_URLS } from './assets'
+import { upright, type Point, type Rect, type TexturePiece } from './geometry'
+import { LOCOMOTIVE_SILHOUETTE } from './icons'
 import {
-  BADGE,
-  BONUS_R,
+  BUBBLE_H,
+  BUBBLE_W,
   CITY_TRACKING,
   CITY_WEIGHT,
-  EMBLEM_R,
-  HUB_SLOT_H,
-  HUB_SLOT_W,
   HUB_TRACKING,
   HUB_WEIGHT,
   IRON_RING,
-  LINK_H,
-  LINK_W,
   MEDALLION_R,
   RAIL_BADGE_R,
   RIBBON_TAIL,
   STOP_TRACKING,
   STOP_WEIGHT,
   TEXTURE_PIECE,
-  TOKEN_H,
-  TOKEN_W,
   TRACK_H,
   type HubParts,
   type StopParts,
@@ -49,10 +42,10 @@ export function BoardDefs() {
         <feGaussianBlur stdDeviation="1.5" />
       </filter>
       <filter id={DEF.tokenShadow} x="-30%" y="-60%" width="160%" height="220%">
-        <feDropShadow dx="1.5" dy="1.5" stdDeviation="2" floodColor="#000" floodOpacity="0.4" />
+        <feDropShadow dx="1.5" dy="1.5" stdDeviation="1.5" floodColor="#000" floodOpacity="0.4" />
       </filter>
       <filter id={DEF.glow} x="-50%" y="-80%" width="200%" height="260%">
-        <feGaussianBlur stdDeviation="2.2" />
+        <feGaussianBlur stdDeviation="3" />
       </filter>
       {/* Turns an image into a flat dark silhouette (the rail-era badge's locomotive). */}
       <filter id={DEF.silhouette}>
@@ -147,33 +140,53 @@ export function RouteShadow({ era, d }: { era: Era; d: string }) {
   return <path d={d} fill="none" stroke="#000" strokeOpacity={0.25} strokeWidth={TRACK_H[era]} transform="translate(1.5 1.5)" />
 }
 
-/* ---- Link spaces and tokens ----------------------------------------------- */
+/* ---- Link bubbles and tokens --------------------------------------------- */
 
-/** A flat hexagon space in the board's bevelled style: link spaces and merchant spaces. */
-function HexSpace({ cx, cy, w, h, glow = false }: { cx: number; cy: number; w: number; h: number; glow?: boolean }) {
-  const tip = h * 0.5
+const bubble = { x: -BUBBLE_W / 2, y: -BUBBLE_H / 2, width: BUBBLE_W, height: BUBBLE_H }
+
+/**
+ * An empty link: the connection bubble (link_space.png), centred on the route
+ * and turned to it, never upside down. When it can be built it gets a
+ * pulsing soft gold glow.
+ */
+export function LinkBubble({ x, y, angle, glow = false }: { x: number; y: number; angle: number; glow?: boolean }) {
+  const pad = 3
   return (
-    <g>
-      {glow && <path d={flatHexagonPath(cx, cy, w + 4, h + 4, tip + 2)} fill="none" stroke={C.gold} strokeWidth={5} filter={`url(#${DEF.glow})`} />}
-      <path d={flatHexagonPath(cx, cy, w, h, tip)} fill={C.space} fillOpacity={0.75} stroke={glow ? C.gold : C.bronze} strokeWidth={2} strokeLinejoin="round" />
-      <path d={flatHexagonPath(cx, cy, w - 5, h - 4, tip - 2)} fill="none" stroke={C.bevel} strokeOpacity={0.3} strokeWidth={1} strokeLinejoin="round" />
+    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`}>
+      {glow && (
+        <rect
+          x={-BUBBLE_W / 2 - pad}
+          y={-BUBBLE_H / 2 - pad}
+          width={BUBBLE_W + pad * 2}
+          height={BUBBLE_H + pad * 2}
+          rx={BUBBLE_H / 2 + pad}
+          fill={C.gold}
+          fillOpacity={0.35}
+          stroke={C.gold}
+          strokeWidth={3}
+          filter={`url(#${DEF.glow})`}
+          className="board-target"
+        />
+      )}
+      {imageOk(LINK_SPACE_URL) ? <image href={LINK_SPACE_URL} {...bubble} /> : <BubbleFallback />}
     </g>
   )
 }
 
-/** An empty link space: hexagon with the link symbol, rotated to the route. Glows gold when it can be built. */
-export function LinkSpace({ x, y, angle, glow = false }: { x: number; y: number; angle: number; glow?: boolean }) {
-  const sw = LINK_W * 0.75
+/** Drawn bubble, if link_space.png can't be loaded: a dark stadium with a bronze rim and the link symbol. */
+function BubbleFallback() {
+  const w = BUBBLE_W
+  const h = BUBBLE_H
   return (
-    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`}>
-      <HexSpace cx={0} cy={0} w={LINK_W} h={LINK_H} glow={glow} />
+    <g>
+      <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={h / 2} fill="#3b3a37" stroke={C.bronze} strokeWidth={1.4} />
       {imageOk(LINK_SYMBOL_URL) ? (
-        <image href={LINK_SYMBOL_URL} x={-sw / 2} y={-sw / 4} width={sw} height={sw / 2} />
+        <image href={LINK_SYMBOL_URL} x={-w * 0.3} y={-w * 0.15} width={w * 0.6} height={w * 0.3} />
       ) : (
-        <g fill="#e8b830" stroke="#6b4f10" strokeWidth={0.8}>
-          <line x1={-9} y1={0} x2={9} y2={0} stroke="#8a8a85" strokeWidth={2} />
-          <circle cx={-10} cy={0} r={4} />
-          <circle cx={10} cy={0} r={4} />
+        <g fill="#f4c42a" stroke="#6b4f10" strokeWidth={0.6}>
+          <rect x={-8} y={-2.2} width={16} height={4.4} fill="none" stroke="#f4c42a" strokeWidth={1.2} />
+          <circle cx={-10.5} cy={0} r={4.2} />
+          <circle cx={10.5} cy={0} r={4.2} />
         </g>
       )}
     </g>
@@ -181,21 +194,24 @@ export function LinkSpace({ x, y, angle, glow = false }: { x: number; y: number;
 }
 
 /**
- * A built link: the owner's token (canal barge or locomotive), rotated to the
- * route and never upside down. Colours without a token image get a stadium
- * in that colour with the texture strip and the art on top.
+ * A built link: the owner's token (a barge on a canal or a locomotive on
+ * rails) at the bubble's size and place, turned to the route and never
+ * upside down. Colours without a token image get a stadium in that colour
+ * with the texture strip and the art on top. `mark` (the colour-blind aid)
+ * adds the owner's letter.
  */
-export function LinkToken({ x, y, angle, era, token, color }: { x: number; y: number; angle: number; era: Era; token: string | undefined; color: string }) {
+export function LinkToken({ x, y, angle, era, token, color, mark }: { x: number; y: number; angle: number; era: Era; token: string | undefined; color: string; mark?: string }) {
   return (
-    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`} filter={`url(#${DEF.tokenShadow})`}>
-      {imageOk(token) ? <image href={token} x={-TOKEN_W / 2} y={-TOKEN_H / 2} width={TOKEN_W} height={TOKEN_H} /> : <StadiumToken era={era} color={color} />}
+    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`}>
+      <g filter={`url(#${DEF.tokenShadow})`}>{imageOk(token) ? <image href={token} {...bubble} /> : <StadiumToken era={era} color={color} />}</g>
+      {mark && <Mark x={BUBBLE_W / 2 - 4} y={-BUBBLE_H / 2 + 3} letter={mark} color={color} />}
     </g>
   )
 }
 
 function StadiumToken({ era, color }: { era: Era; color: string }) {
-  const w = TOKEN_W
-  const h = TOKEN_H
+  const w = BUBBLE_W
+  const h = BUBBLE_H
   const clipId = `ib-stadium-${era}`
   const art = TOKEN_ART_URLS[era]
   const artRatio = era === 'canal' ? 188 / 792 : 296 / 766
@@ -216,13 +232,36 @@ function StadiumToken({ era, color }: { era: Era; color: string }) {
   )
 }
 
+/** A player's letter in a small disc of their colour (the colour-blind aid). */
+function Mark({ x, y, letter, color }: { x: number; y: number; letter: string; color: string }) {
+  return (
+    <g pointerEvents="none">
+      <circle cx={x} cy={y} r={5} style={{ fill: color }} stroke={C.ink} strokeWidth={1} />
+      <text x={x} y={y} dy="0.36em" textAnchor="middle" fontSize={7} fontWeight={800} className="font-display" fill={C.ink}>
+        {letter}
+      </text>
+    </g>
+  )
+}
+
 /* ---- Cities --------------------------------------------------------------- */
 
+/** A built industry: the owner's colour, the icon, its ★ value, and for a mill the cotton waiting as pips (0–3). */
+export interface BuiltTile {
+  industry: Industry
+  color: string
+  stars?: number
+  /** Cotton waiting at a mill; undefined for other industries. */
+  goods?: number
+  mark?: string
+}
+
 /**
- * One industry slot: a charcoal square with the picture of what it allows (two
- * smaller pictures for a dual slot), or the owner's tile once built.
+ * One industry slot: a charcoal square with a dark-bronze border, an inner
+ * vignette and the picture of what it allows (two smaller pictures and a
+ * bronze divider for a dual slot), or the owner's tile once built.
  */
-export function SlotTile({ rect, allowed, tile }: { rect: Rect; allowed: Industry[]; tile: { industry: Industry; color: string; level?: number } | null }) {
+export function SlotTile({ rect, allowed, tile }: { rect: Rect; allowed: Industry[]; tile: BuiltTile | null }) {
   const { x, y, w, h } = rect
   const cx = x + w / 2
   const cy = y + h / 2
@@ -231,15 +270,23 @@ export function SlotTile({ rect, allowed, tile }: { rect: Rect; allowed: Industr
       <g>
         <rect x={x} y={y} width={w} height={h} rx={2} style={{ fill: tile.color }} stroke="#000" strokeOpacity={0.6} strokeWidth={1.5} />
         <rect x={x} y={y} width={w} height={h} rx={2} fill={`url(#${DEF.vignette})`} opacity={0.55} />
-        <IndustryIcon industry={tile.industry} cx={cx} cy={cy} size={w * 0.85} />
-        {tile.level !== undefined && (
+        <IndustryIcon industry={tile.industry} cx={cx} cy={cy - 1.5} size={w * 0.78} />
+        {tile.stars !== undefined && (
           <g>
-            <circle cx={x + 5.5} cy={y + h - 5.5} r={4.6} fill={C.ink} stroke={C.cream} strokeWidth={0.8} />
-            <text x={x + 5.5} y={y + h - 5.5} dy="0.36em" textAnchor="middle" fontSize={6.5} fontWeight={800} className="font-display" fill={C.cream}>
-              {tile.level}
+            <rect x={x + 1.5} y={y + h - 10} width={15} height={8.5} rx={2} fill={C.ink} fillOpacity={0.85} />
+            <text x={x + 9} y={y + h - 5.75} dy="0.36em" textAnchor="middle" fontSize={7} fontWeight={800} className="font-display" fill={C.gold}>
+              {tile.stars}★
             </text>
           </g>
         )}
+        {tile.goods !== undefined && (
+          <g>
+            {[0, 1, 2].map((i) => (
+              <circle key={i} cx={x + w - 4.5 - (2 - i) * 5.2} cy={y + h - 5.5} r={2.1} fill={i < tile.goods! ? C.cream : C.ink} stroke={C.ink} strokeWidth={0.8} />
+            ))}
+          </g>
+        )}
+        {tile.mark && <Mark x={x + 5} y={y + 5} letter={tile.mark} color={tile.color} />}
       </g>
     )
   }
@@ -289,9 +336,33 @@ export function NamePlate({ rect, color, name, fontSize }: { rect: Rect; color: 
   )
 }
 
+/* ---- Hexagon emblems ------------------------------------------------------ */
+
+/** The Brass-style link hexagon (hex_link.png) on stops and hubs; drawn if the picture can't be loaded. */
+function HexLink({ rect }: { rect: Rect }) {
+  if (imageOk(HEX_LINK_URL)) return <image href={HEX_LINK_URL} x={rect.x} y={rect.y} width={rect.w} height={rect.h} />
+  const cx = rect.x + rect.w / 2
+  const cy = rect.y + rect.h / 2
+  const r = rect.w / 2
+  const corners = (radius: number) =>
+    Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i - Math.PI / 2
+      return `${f(cx + Math.cos(a) * radius)},${f(cy + Math.sin(a) * radius)}`
+    }).join(' ')
+  return (
+    <g>
+      <polygon points={corners(r)} fill="#141414" />
+      <polygon points={corners(r * 0.78)} fill="none" stroke="#f4c42a" strokeWidth={1.3} />
+      <line x1={cx - 3.5} y1={cy} x2={cx + 3.5} y2={cy} stroke="#f4c42a" strokeWidth={1.2} />
+      <circle cx={cx - 3.6} cy={cy} r={1.8} fill="#f4c42a" />
+      <circle cx={cx + 3.6} cy={cy} r={1.8} fill="#f4c42a" />
+    </g>
+  )
+}
+
 /* ---- Stops ---------------------------------------------------------------- */
 
-/** Silver-grey plaque with dark lettering and two decorative hexagon emblems on top. */
+/** Silver-grey plaque with dark letter-spaced capitals and two link hexagons on its top edge. */
 export function StopPlaque({ parts, name, fontSize }: { parts: StopParts; name: string; fontSize: number }) {
   const { x, y, w, h } = parts.plaque
   const spacing = fontSize * STOP_TRACKING
@@ -299,12 +370,9 @@ export function StopPlaque({ parts, name, fontSize }: { parts: StopParts; name: 
     <g filter={`url(#${DEF.shadow})`}>
       <rect x={x} y={y} width={w} height={h} rx={1} fill={C.plaque} stroke={C.plaqueEdge} strokeWidth={1.2} />
       <rect x={x + 1.6} y={y + 1.6} width={w - 3.2} height={h - 3.2} rx={0.6} fill="none" stroke="#fff" strokeOpacity={0.45} strokeWidth={0.6} />
-      {parts.emblems.map((c) => (
-        <path key={c.x} d={flatHexagonPath(c.x, c.y, EMBLEM_R * 2, EMBLEM_R * 1.73)} fill={C.tile} stroke="#fff" strokeWidth={0.8} strokeLinejoin="round" />
-      ))}
       <text
         x={x + w / 2 + spacing / 2}
-        y={y + h / 2 + 1}
+        y={y + h / 2 + 1.5}
         dy="0.36em"
         textAnchor="middle"
         fontSize={fontSize}
@@ -315,6 +383,9 @@ export function StopPlaque({ parts, name, fontSize }: { parts: StopParts; name: 
       >
         {name.toUpperCase()}
       </text>
+      {parts.hexes.map((r) => (
+        <HexLink key={r.x} rect={r} />
+      ))}
     </g>
   )
 }
@@ -322,8 +393,9 @@ export function StopPlaque({ parts, name, fontSize }: { parts: StopParts; name: 
 /* ---- Trade hubs ----------------------------------------------------------- */
 
 /**
- * A trade hub: two merchant spaces on top of a round medallion with the hub's
- * photo, crossed by a ribbon with the name, and the goods it buys below.
+ * A trade hub: two link hexagons on top of a round medallion with the hub's
+ * photo (a thick iron ring and a thin bronze rim), crossed by a pale ribbon
+ * with the name, and small icons of what it buys below.
  */
 export function HubGroup({ location, parts, fontSize, photo }: { location: HubLocation; parts: HubParts; fontSize: number; photo: string | null }) {
   const m = parts.medallion
@@ -342,17 +414,7 @@ export function HubGroup({ location, parts, fontSize, photo }: { location: HubLo
   const strip = icons.length ? { x: icons[0].x - 2.5, y: icons[0].y - 2, w: icons.at(-1)!.x + icons.at(-1)!.w - icons[0].x + 5, h: icons[0].h + 4 } : null
   return (
     <g filter={`url(#${DEF.shadow})`}>
-      {/* Merchant spaces: merchant tiles go here later */}
-      {parts.slots.map((r) => {
-        const size = HUB_SLOT_H * 0.7
-        return (
-          <g key={r.x}>
-            <HexSpace cx={r.x + r.w / 2} cy={r.y + r.h / 2} w={HUB_SLOT_W} h={HUB_SLOT_H} />
-            {imageOk(MERCHANT_URL) && <image href={MERCHANT_URL} x={r.x + r.w / 2 - size / 2} y={r.y + r.h / 2 - size / 2} width={size} height={size} />}
-          </g>
-        )
-      })}
-      {/* Medallion: the hub's photo inside a thick iron ring with a bronze inner rim */}
+      {/* Medallion: the hub's photo inside a thick iron ring with a thin bronze rim */}
       <clipPath id={clipId}>
         <circle cx={m.x} cy={m.y} r={inner} />
       </clipPath>
@@ -360,7 +422,8 @@ export function HubGroup({ location, parts, fontSize, photo }: { location: HubLo
       {photo && <image href={photo} x={m.x - inner - 1} y={m.y - inner - 1} width={inner * 2 + 2} height={inner * 2 + 2} clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" />}
       <circle cx={m.x} cy={m.y} r={R - IRON_RING / 2} fill="none" stroke={C.iron} strokeWidth={IRON_RING} />
       <circle cx={m.x} cy={m.y} r={R - IRON_RING / 2} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.7} />
-      <circle cx={m.x} cy={m.y} r={inner} fill="none" stroke={C.bronze} strokeWidth={1} />
+      <circle cx={m.x} cy={m.y} r={R + 0.3} fill="none" stroke={C.bronze} strokeWidth={1} />
+      <circle cx={m.x} cy={m.y} r={inner} fill="none" stroke={C.bronze} strokeWidth={0.8} />
       {/* Ribbon with folded tails */}
       {[leftTail, rightTail].map((d) => (
         <g key={d}>
@@ -391,24 +454,24 @@ export function HubGroup({ location, parts, fontSize, photo }: { location: HubLo
       {icons.map((r, i) => (
         <IndustryIcon key={location.buys[i]} industry={location.buys[i]} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={r.w} />
       ))}
+      {/* Two link hexagons on the medallion's top edge */}
+      {parts.hexes.map((r) => (
+        <HexLink key={r.x} rect={r} />
+      ))}
     </g>
   )
 }
 
-/** The hub's square number badge and round bonus badge (drawn in the badges layer). */
-export function HubBadges({ parts, value }: { parts: HubParts; value: number }) {
-  const b = parts.badge
+/** The hub's square badge with its current price (drawn in the badges layer, so it updates live). */
+export function PriceBadge({ rect, price }: { rect: Rect; price: number }) {
+  const { x, y, w, h } = rect
   return (
     <g filter={`url(#${DEF.shadow})`}>
-      <rect x={b.x} y={b.y} width={BADGE} height={BADGE} rx={1.5} fill={C.tile} stroke={C.bronze} strokeWidth={1.2} />
-      <text x={b.x + BADGE / 2} y={b.y + BADGE / 2} dy="0.36em" textAnchor="middle" fontSize={9} fontWeight={800} className="font-board" fill={C.cream}>
-        {value}
+      <rect x={x} y={y} width={w} height={h} rx={2} fill={C.tile} stroke={C.gold} strokeWidth={1.3} />
+      <rect x={x + 1.8} y={y + 1.8} width={w - 3.6} height={h - 3.6} rx={1} fill="none" stroke={C.bronze} strokeOpacity={0.6} strokeWidth={0.6} />
+      <text x={x + w / 2} y={y + h / 2} dy="0.36em" textAnchor="middle" fontSize={10} fontWeight={800} className="font-display" fill={C.gold}>
+        £{price}
       </text>
-      <circle cx={parts.bonus.x} cy={parts.bonus.y} r={BONUS_R} fill={C.bronze} stroke={C.ink} strokeWidth={1} />
-      <g transform={`translate(${f(parts.bonus.x)} ${f(parts.bonus.y)})`}>
-        <path d={BARREL_SILHOUETTE} fill={C.ink} fillOpacity={0.85} />
-        <path d={BARREL_HOOPS} stroke={C.bronze} strokeWidth={0.8} />
-      </g>
     </g>
   )
 }
@@ -432,28 +495,3 @@ export function RailEraBadge({ at }: { at: Point }) {
     </g>
   )
 }
-
-/** Goods waiting at a built industry. */
-export function GoodsBadge({ at, goods }: { at: Point; goods: number }) {
-  return (
-    <g>
-      <circle cx={at.x} cy={at.y} r={6.5} className="fill-brass-300" stroke={C.ink} strokeWidth={1.2} />
-      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={9} fontWeight={800} className="font-display" fill={C.ink}>
-        {goods}
-      </text>
-    </g>
-  )
-}
-
-/** Small price tag (current sale price) above a hub's ribbon. */
-export function PriceTag({ at, price }: { at: Point; price: number }) {
-  return (
-    <g>
-      <rect x={at.x - 13} y={at.y - 8} width={26} height={16} rx={3} fill={C.tile} stroke={C.gold} strokeWidth={1} />
-      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={10} fontWeight={800} className="font-display" fill={C.gold}>
-        £{price}
-      </text>
-    </g>
-  )
-}
-

@@ -15,12 +15,14 @@ interface IndustryIconProps extends ImgHTMLAttributes<HTMLImageElement> {
 export function IndustryIcon({ kind, className = '', style, ...props }: IndustryIconProps) {
   const url = INDUSTRY_ICON_URLS[kind]
   const [failed, setFailed] = useState(false)
+  // Sized by the font unless the caller gives a size class.
+  const sized = /(^|\s)size-/.test(className) ? className : `size-[1em] ${className}`
   if (!url || failed) {
     return (
       <span
         aria-hidden="true"
-        className={`inline-grid place-items-center rounded-sm bg-soot-800 font-board leading-none font-bold text-parchment-200 ${className}`}
-        style={{ width: '1em', height: '1em', fontSize: 'inherit', ...style }}
+        className={`inline-grid place-items-center rounded-sm bg-soot-800 font-board leading-none font-bold text-parchment-200 ${sized}`}
+        style={style}
       >
         <span style={{ fontSize: '0.32em' }}>{INDUSTRY_SHORT[kind]}</span>
       </span>
@@ -32,8 +34,8 @@ export function IndustryIcon({ kind, className = '', style, ...props }: Industry
       alt=""
       aria-hidden="true"
       draggable={false}
-      className={`inline-block object-contain ${className}`}
-      style={{ width: '1em', height: '1em', ...style }}
+      className={`inline-block object-contain ${sized}`}
+      style={style}
       onError={() => {
         console.warn(`Icon for ${INDUSTRIES[kind].name} failed to load; showing a short label instead.`)
         setFailed(true)

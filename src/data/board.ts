@@ -25,14 +25,11 @@ export const INDUSTRY_NAMES: Record<Industry, string> = {
 /** Short labels, shown in place of an industry's picture if it can't be loaded. */
 export const INDUSTRY_SHORT: Record<Industry, string> = { cotton: 'COT', port: 'PRT', shipyard: 'SHP', iron: 'IRN', coal: 'COL' }
 
-/** What a hub is buying when it lists each industry. */
-export const GOODS_NAMES: Record<Industry, string> = {
-  cotton: 'Cotton',
-  port: 'Port cargo',
-  shipyard: 'Ships',
-  iron: 'Iron',
-  coal: 'Coal',
-}
+/** What a hub can buy: cotton from mills, coal and iron from players' stores. */
+export const HUB_GOODS = ['cotton', 'coal', 'iron'] as const
+export type HubGoods = (typeof HUB_GOODS)[number]
+
+export const GOODS_NAMES: Record<HubGoods, string> = { cotton: 'Cotton', coal: 'Coal', iron: 'Iron' }
 
 export type LocationType = 'city' | 'stop' | 'hub'
 export type LinkType = 'canal' | 'rail' | 'both'
@@ -87,11 +84,10 @@ export interface StopLocation extends LocationBase {
 /** Trade hub where goods are sold. Not buildable. */
 export interface HubLocation extends LocationBase {
   type: 'hub'
-  /** Starting price per goods sold here in a match (£). */
+  /** Starting (and highest) price per unit sold here in a match (£). */
   price: number
-  /** The number on the hub's square badge. */
-  value: number
-  buys: Industry[]
+  /** What it buys. Its icons use the industry that makes each (loom, coal, iron). */
+  buys: HubGoods[]
 }
 
 export type BoardLocation = CityLocation | StopLocation | HubLocation
@@ -114,8 +110,11 @@ export interface BoardData {
 
 /** What has been built: rendered on top of the board. */
 export interface BuiltState {
-  /** Key from slotKey(locationId, slotIndex). */
-  slots: Record<string, { player: number; industry: Industry; goods?: number; level?: number }>
+  /**
+   * Key from slotKey(locationId, slotIndex). `stars` is the ★ value shown on
+   * the tile; `goods` the cotton waiting at a mill (shown as pips).
+   */
+  slots: Record<string, { player: number; industry: Industry; goods?: number; stars?: number }>
   /** Link id → owner. Built links are drawn as the current era's token. */
   links: Record<string, { player: number }>
 }
@@ -145,6 +144,7 @@ export function isLinkActive(type: LinkType, era: Era): boolean {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isIndustry = (v: unknown): v is Industry => INDUSTRY_IDS.includes(v as Industry)
+const isHubGoods = (v: unknown): v is HubGoods => HUB_GOODS.includes(v as HubGoods)
 const isPercent = (v: unknown) => isNumber(v) && v >= 0 && v <= 100
 
 /** Every problem found in `raw`, as readable messages. Empty means valid. */
@@ -188,11 +188,11 @@ export function validateBoardData(raw: unknown): string[] {
         errors.push(`${where}: each slot lists 1 or 2 known industries`)
       }
     } else if (loc.type === 'hub') {
-      if (!Array.isArray(loc.buys) || loc.buys.length === 0 || !loc.buys.every(isIndustry)) {
-        errors.push(`${where}: a hub needs a list of industries it buys`)
+      if (!Array.isArray(loc.buys) || loc.buys.length === 0 || !loc.buys.every(isHubGoods) || new Set(loc.buys).size !== loc.buys.length) {
+        errors.push(`${where}: a hub buys a list of ${HUB_GOODS.join(', ')} (each once)`)
       }
       if (!isNumber(loc.price) || loc.price < 1) errors.push(`${where}: a hub needs a price of at least 1`)
-      if (!isNumber(loc.value)) errors.push(`${where}: a hub needs a badge value`)
+      if ('value' in loc) errors.push(`${where}: hubs have no "value" any more (the badge shows the live price)`)
     } else if (loc.type !== 'stop') {
       errors.push(`${where}: type must be city, stop or hub`)
     }
@@ -316,7 +316,7 @@ export function designProblems(board: BoardData, design: BoardDesign): string[] 
 /* Export                                                                    */
 /* ------------------------------------------------------------------------ */
 
-const LOCATION_KEYS = ['id', 'name', 'type', 'x', 'y', 'region', 'ring', 'era', 'labelOffset', 'slots', 'price', 'value', 'buys']
+const LOCATION_KEYS = ['id', 'name', 'type', 'x', 'y', 'region', 'ring', 'era', 'labelOffset', 'slots', 'price', 'buys']
 const LINK_KEYS = ['id', 'from', 'to', 'type', 'points']
 
 /** One object per line, `{ "key": value, ... }` in a fixed key order, as board.json is laid out. */

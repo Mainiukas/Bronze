@@ -2,6 +2,7 @@ import { IconPlay } from './icons'
 
 interface PlayButtonProps {
   onClick: () => void
+  label?: string
   /** Short line under the label, e.g. "Normal · Mersey Valley". */
   subtitle?: string
 }
@@ -10,7 +11,7 @@ interface PlayButtonProps {
  * The big PLAY button: a brass slab with a pulsing furnace glow, a light
  * sweep on hover, and a physical "press" (the slab drops onto its ledge).
  */
-export function PlayButton({ onClick, subtitle }: PlayButtonProps) {
+export function PlayButton({ onClick, label = 'PLAY', subtitle }: PlayButtonProps) {
   return (
     <div className="relative">
       {/* Pulsing glow behind the button */}
@@ -36,8 +37,8 @@ export function PlayButton({ onClick, subtitle }: PlayButtonProps) {
 
         <IconPlay className="relative size-9 drop-shadow-[0_1px_0_rgb(255_255_255/0.4)] transition-transform duration-200 group-hover:scale-110 sm:size-10" />
         <span className="relative flex flex-col items-start leading-none">
-          <span className="font-display text-4xl font-extrabold tracking-[0.22em] drop-shadow-[0_1px_0_rgb(255_255_255/0.35)] sm:text-5xl">
-            PLAY
+          <span className="font-display text-3xl font-extrabold tracking-[0.18em] whitespace-nowrap drop-shadow-[0_1px_0_rgb(255_255_255/0.35)] sm:text-4xl">
+            {label}
           </span>
           {subtitle && (
             <span className="mt-1 font-display text-xs font-bold tracking-[0.18em] text-soot-900/75 uppercase sm:text-sm">

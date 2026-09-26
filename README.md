@@ -5,50 +5,46 @@ Play against computer opponents or pass & play on one device.
 
 ## How the game works
 
-Each round, every player takes a turn of two actions:
+2–4 players (each human or computer, Easy, Normal or Hard) build industries,
+lay links and ship goods on **Wales & the West**. Each round, every player
+takes a turn of two actions (or ends it early):
 
-- **Build an industry** in a town in your network: a Cotton mill (makes the
-  goods), a Port, a Shipyard, an Iron works or a Coal mine. These five are
-  the only industries. Your first build can go anywhere.
-- **Build a link**: a canal or railway on a route touching your network.
-- **Ship goods** to a market that buys them, over built links (anyone's).
-  Money and +1★ per goods, doubled over 2+ links. Using an opponent's link
-  pays them a toll.
-- **Raise funds.**
+- **Build an industry** on a free slot in a town in your network: a Coal mine,
+  Iron works, Cotton mill, Port or Shipyard (the only five). Your very first
+  build can go anywhere; the rail-era places open in the rail era.
+- **Build a link**: an unbuilt route of the current era touching your network.
+  Canals £3, railways £5 + 1 coal; +1★ each.
+- **Ship**: a mill's cotton to a hub that buys cotton or to any port, or all
+  the coal or iron in your store (from one of your mines or works) to a hub
+  that buys it, over built links. Hubs pay their price, which drops £1 per
+  unit; ports pay £3. +1★ per unit, doubled over 2+ links. Opponents' links
+  cost a £1 toll.
+- **Raise funds**: +£3.
 
-Missing coal and iron are bought automatically. At the end of each round,
-industries produce and everyone collects income. After the last round, money
-and market towns in your network add bonus prestige. Most prestige wins.
+Missing coal and iron for a cost are bought automatically (£3 and £5). At the
+end of each round industries produce, everyone gets £2 and hub prices recover.
+The rail era begins half way, and every canal comes off the board. Final score:
+★ + 1★ per £5 + 2★ per hub in your network.
 
-Modes change the board size (outer towns are dropped), the number of rounds and
-the move timer. The full rules are in the game under ☰ → How to Play, and every
-number lives in `src/game/rules.ts`.
+The full rules are in the game (Rules, on the main menu and in a match), built
+from the same numbers the engine uses: `src/game/rules.ts`, the modes and
+`board.json`.
 
-### Wales & the West
+**Engine.** `src/game/engine.ts` is pure and deterministic: `applyAction(state,
+action)` returns a new state or throws `IllegalActionError` with a message the
+UI shows as a toast. `legalActions` is the only source of computer moves. The
+match seed decides every computer choice, so a seed and the same seats replay
+a match. The UI renders state and dispatches actions; it never offers an
+illegal one (disabled buttons say why).
 
-The default map is played on the illustrated board (`assets/map.webp`), with a
-few extra rules:
+**Modes**: Normal (whole map, 10 rounds, £14, 120 s turns), Blitz (rings 1–2,
+7 rounds, £16, 45 s) and Bullet (ring 1, 5 rounds, £18, 15 s). Places outside
+the mode's rings are drawn faded and aren't in the match. Three drawn practice
+maps (no eras; their market towns work like hubs) are still selectable.
 
-- **Eras.** The match starts in the canal era; the rail era begins half way
-  (round 6 of 10 in Normal). Only the current era's links are on the board:
-  canals, then railways. A link marked for both is a canal in the canal era
-  and a railway in the rail era. Railways cost £5 plus 1 coal. When the rail
-  era begins, every canal link comes off the board, as in Brass.
-- **Trade hubs** (The North, London, West Wales) are the markets. Cotton is
-  the goods you ship; a hub's price drops as goods are sold. The pictures
-  under each ribbon (`buys` in `board.json`) are what the hub trades in; only
-  cotton is shipped in matches.
-- **Ports** buy any goods at £3 each and pay £1 a round. Shipping to someone
-  else's port pays them £1 per goods.
-- **Stops** (Brecon, Reading, Taunton) have no slots, but routes pass through them.
-- **Rail-era places** (The North, Plymouth and Taunton, `"era": "rail"`) can
-  only be reached by rail; nothing can be built in Plymouth before the rail
-  era. Plymouth has the only shipyard.
-- **Smaller modes** use the heart of the map: 13 locations in Bullet, 20 in
-  Blitz and all 25 in Normal (the `ring` field in `board.json`).
-
-Build, ship and link by clicking the board: legal slots, markets and links
-light up for the action you picked.
+**Online and friends** are marked "Coming soon": there is no account or game
+server, so the friends drawer says so and there is no log-out. Locker, Shop and
+Tournaments are "Coming soon" pages too.
 
 Built with React 19, TypeScript, Vite, Tailwind CSS v4 and React Router.
 
@@ -65,7 +61,7 @@ Other scripts:
 | ---------------------- | --------------------------------------------------------- |
 | `npm run build`        | Type-check (`tsc -b`) and build to `dist/`                |
 | `npm run build:single` | Type-check and build one self-contained `dist-single/index.html` (JS, CSS and fonts inlined) |
-| `npm test`             | Engine unit tests plus a full computer-vs-computer match on every map, mode and player count |
+| `npm test`             | Engine and board tests, plus 60 simulated four-computer matches (every mode × 20 seeds), which print the average score per AI level |
 | `npm run preview`      | Serve the production build                                |
 | `npm run lint`         | Lint with oxlint                                          |
 
@@ -96,34 +92,43 @@ tokens, plaques and tiles, badges, hover/selection, tooltips.
 
 - **Only the era's links are drawn**: canal and "both" links (as a canal) in
   the canal era, rail and "both" links (as a railway) in the rail era.
-  Places reached only by rail keep a locomotive badge.
-- **Cities**: 34-unit squares (a row, or 2 × 2 for four slots) with the
-  industry pictures, over a flat name plate in the region's colour. Built
-  tiles show the owner's colour, the picture and the level. **Stops**: silver
-  plaques with two emblems. **Hubs**: two merchant spaces, a medallion with the
-  hub's photo, a ribbon, the number and bonus badges, and what they buy.
+  Places reached only by rail have a locomotive badge until the rail era.
+- **Cities**: 34-unit squares (a row for 1–2 slots, a triangle of 2 over 1 for
+  3, 2 × 2 for 4) with the industry pictures, over a flat name plate in the
+  region's colour. A built tile shows the owner's colour, the picture, its ★
+  value and, on a mill, the cotton waiting as pips. **Stops**: silver plaques
+  with two link hexagons. **Hubs**: two link hexagons over a medallion with the
+  hub's photo, a ribbon, the live price on a square badge, and what they buy.
 - **Routes** are curves (seeded bends of 8–15 %, or a spline through a link's
   `points`) measured with `getTotalLength()`/`getPointAtLength()` and drawn by
   laying the texture along them in pieces edge to edge: each piece is a quad
   between the route's normals, so pieces never overlap or gap and the last
   stops exactly at the end.
-- **Link spaces** are flat hexagons with the link symbol; built links show the
-  owner's token (a barge or a locomotive, per era). Player colours are the
-  token colours (yellow, blue, purple, red, white); any other colour gets a
-  drawn token with the barge or locomotive art.
+- **Links** without an owner show the connection bubble (52 × 21.7, turned to
+  the route, never upside down), which pulses gold when you can build it; built
+  links show the owner's token at the same size (a barge or a locomotive, per
+  era). Player colours are the token colours (yellow, blue, purple, red,
+  white); any other colour gets a drawn token with the barge or locomotive art.
+- **Feedback**: the active player's network is ringed in their colour, legal
+  targets glow, the last move flashes, and a shipment sends a dot along the
+  links it used. Tooltips give names, slots and owners, connections, what a hub
+  buys and its current price.
 - **Layout**: plaques and tile groups are nudged apart (never the location
   points) until groups, link spaces and tokens are at least 8 units apart.
   Route ends fan out around each group (at least 14 apart), and bends are
   flipped or increased until no route runs over another route or a group; a
   group still in a route's way steps aside and the layout is redone. A
-  location's `labelOffset` pins its group by hand. Development builds log
-  anything left over.
+  location's `labelOffset` pins its group by hand. Labels are measured from a
+  table of Cinzel Bold glyph widths, so the layout is identical in every
+  browser and in the tests. Development builds log anything left over.
 
 **Art** (in `assets/`, preloaded before the board first draws; anything
 missing or failing is logged and drawn instead): `map.png` (else `map.webp`),
 `icons/{loom,anchor,shipyard,iron,coal}.png` (the only industry icons in the
-game), `textures/{rail,canal}.png`, `tokens/` (link symbol, merchant, the
-tokens per colour, and the barge and locomotive art) and `hubs/<hub id>.png`.
+game), `textures/{rail,canal}.png`, `tokens/` (`link_space.png`, the
+connection bubble; `hex_link.png`, the hexagon on stops and hubs;
+`link_symbol.png`, used by the bubble's fallback; the tokens per colour; and
+the barge and locomotive art) and `hubs/<hub id>.png`.
 
 Coordinates in `board.json` are percentages of the image (0–100), so the
 overlay stays aligned at any size. The network is held to its design by
@@ -155,55 +160,38 @@ from it, so you can check a calibration in a real game before exporting.
 src/
   game/                   The game itself, independent of React
     rules.ts              Every rule number: costs, prices, income, scoring
-    engine.ts             Setup, legal moves, applying actions, production, final scores
-    ai.ts                 Computer player (plans both actions of its turn)
+    engine.ts             Setup, legal moves, applying actions, production, eras, final scores, saves
+    ai.ts                 Computer players: Easy, Normal, Hard (never throws)
     types.ts              GameState and action types
-    engine.test.ts        Rules tests and simulated matches
-    illustrated.test.ts   Wales & the West rules: eras, stops, hubs, ports, rail-era places
-  App.tsx                 Router, layout, app-wide state (selection, settings, saved match, stats)
+    engine.test.ts        The rules, case by case
+    simulation.test.ts    Four computer players × every mode × 20 seeds, with state checks
+  App.tsx                 Router, app-wide state (settings, saved match, stats, overlays)
   components/board/       Illustrated map board: IllustratedBoard (view), parts (SVG pieces),
                           layout (placement, route fan-out, collisions), geometry (curves,
-                          texture pieces, hulls), sampling (getPointAtLength), assets
-                          (art files, preloading, fallbacks), style, icons, BoardTooltip
-  main.tsx                Entry point; loads the bundled fonts
-  index.css               Theme tokens (colors, fonts, animations) and shared component classes
+                          texture pieces, hulls), sampling (getPointAtLength), measure (label
+                          widths), assets (art files, preloading, fallbacks), style, icons,
+                          BoardTooltip
   components/
-    TopBar.tsx            Friends button · tab bar · menu button
-    TabNav.tsx            Tab bar (scrolls sideways on mobile)
-    FriendsPanel.tsx      Slide-in friends drawer (placeholder)
-    MoreMenu.tsx          ☰ dropdown: Settings, How to Play, Credits, Log out
-    SettingsModal.tsx     Volume sliders, language, move-timer toggle
-    InfoModals.tsx        How to Play and Credits dialogs
-    ModeCard.tsx          Selectable game-mode card
-    MapCard.tsx           Selectable map card
-    MapPreview.tsx        SVG map schematic drawn from map data
-    PlayButton.tsx        The big PLAY button
-    Dialog.tsx            Native <dialog> wrapper (modal or drawer)
-    ModalFrame.tsx        Standard modal layout (header, body, footer)
-    ToastProvider.tsx     Toast messages (see hooks/useToast.ts)
-    ComingSoon.tsx        Shared placeholder page layout
-    SceneBackground.tsx   Decorative backdrop: glow, gears, smoke, embers
-    Gear.tsx, icons.tsx   Original SVG artwork
-    MatchSetupDialog.tsx  Player count and who plays each seat
-    game/                 Match screen parts: GameBoard, TurnPanel, PlayersPanel,
-                          GameLog, MoveTimer, ResultsDialog, industry glyphs
+    MatchSetupDialog.tsx  New game: mode, map, seats (human/AI, level, name, colour), seed
+    InfoModals.tsx        Rules and Credits
+    SettingsModal.tsx     Animation and computer speed, timer, log, colour-blind aid, sound
+    FriendsPanel.tsx      Friends drawer ("Coming soon")
+    game/                 Match screen: ActionBar, PlayersPanel, MarketPanel, GameLog, MoveTimer,
+                          EraBanner, ResultsDialog, ZoomPan, GameBoard (practice maps), glyphs
+    …                     Top bar, tabs, menu, dialogs, cards, toasts, artwork
   pages/
     MainMenu.tsx, Game.tsx, MapBoard.tsx, Achievements.tsx, Locker.tsx, Shop.tsx, Tournaments.tsx
   data/
-    gameModes.ts          Game modes: rounds, starting money, board size, timer
-    maps.ts               Maps: the illustrated map plus schematic maps (towns, plots, routes, decoration)
+    gameModes.ts          Game modes: rounds, starting money, board size, timer, computer pause
+    maps.ts               Maps: the illustrated map plus the drawn practice maps
     board.json            Map board data: locations, slots, links (edit via #/board?edit=1)
     board.ts              Board types, validation, export formatting, era rules, network checks
     board.test.ts         Board data, the design checks, curves, texture pieces and layout
     achievements.ts       Achievements and lifetime stats
     navigation.ts         Tab list and route paths
     settings.ts           Settings shape, defaults and validation
-  hooks/
-    usePersistentState.ts useState backed by localStorage
-    useToast.ts           Toast context and hook
-  lib/
-    storage.ts            Safe localStorage access (all calls wrapped in try/catch)
-    sound.ts              Synthesised sound effects and ambient music (Web Audio)
+  hooks/                  usePersistentState (localStorage-backed state), useToast
+  lib/                    storage (safe localStorage), sound (Web Audio), random (new seeds)
 ```
 
 ## Extending
@@ -215,8 +203,8 @@ src/
   decoration, on a 160 × 100 grid. The lobby preview and the game board are both drawn from
   it, and `npm test` checks that every mode's cut of the map is connected and
   plays to the end.
-- **Balance:** change the numbers in `src/game/rules.ts`, then run
-  `SIM=1 npm test` to print scores from simulated matches.
+- **Balance:** change the numbers in `src/game/rules.ts`, then run `npm test`:
+  the simulation prints the average final score per AI level.
 - **New tab:** add a path to `PATHS` and an entry to `NAV_TABS` in
   `src/data/navigation.ts`, then add a `<Route>` in `App.tsx`.
 - **Re-theme:** change the color tokens in the `@theme` block at the top of
@@ -225,8 +213,11 @@ src/
 
 ## Saved data
 
-The selected mode and map, the settings, the match in progress and your
-stats are saved to localStorage (`bronze.lobby.*`, `bronze.settings`,
-`bronze.match`, `bronze.stats`). Saved values are validated when read. Close
-the tab mid-match and you can resume it from the main menu. If storage isn't
-available, the app keeps working with in-memory state.
+The selected mode and map, the settings, the last new-game seats, the match in
+progress and your stats are saved to localStorage (`bronze.lobby.*`,
+`bronze.settings`, `bronze.setup`, `bronze.match`, `bronze.stats`). The match
+is saved after every action, so **Continue** on the main menu resumes exactly
+where you left off. Saved values are validated when read; a match saved by an
+older version (`GAME_VERSION` in `src/game/types.ts`) isn't resumed: the main
+menu offers to start a new game instead. If storage isn't available, the app
+keeps working with in-memory state.

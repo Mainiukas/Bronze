@@ -8,9 +8,9 @@
     "southwest": { "name": "South-West", "color": "#1f5a55" }
   },
   "locations": [
-    { "id": "the_north", "name": "The North", "type": "hub", "x": 62, "y": 5, "ring": 1, "era": "rail", "price": 6, "value": 12, "buys": ["cotton","coal"] },
-    { "id": "london", "name": "London", "type": "hub", "x": 95, "y": 47, "ring": 1, "price": 7, "value": 12, "buys": ["cotton","coal","iron","port","shipyard"] },
-    { "id": "west_wales", "name": "West Wales", "type": "hub", "x": 6, "y": 44, "ring": 2, "price": 5, "value": 12, "buys": ["cotton","coal"] },
+    { "id": "the_north", "name": "The North", "type": "hub", "x": 62, "y": 5, "ring": 1, "era": "rail", "price": 6, "buys": ["cotton","coal"] },
+    { "id": "london", "name": "London", "type": "hub", "x": 95, "y": 47, "ring": 1, "price": 7, "buys": ["cotton","coal","iron"] },
+    { "id": "west_wales", "name": "West Wales", "type": "hub", "x": 6, "y": 44, "ring": 2, "price": 5, "buys": ["cotton","coal"] },
     { "id": "brecon", "name": "Brecon", "type": "stop", "x": 33, "y": 24, "ring": 2 },
     { "id": "reading", "name": "Reading", "type": "stop", "x": 90, "y": 44, "ring": 1 },
     { "id": "taunton", "name": "Taunton", "type": "stop", "x": 48, "y": 67, "ring": 3, "era": "rail" },

@@ -1,6 +1,5 @@
 import {
   GOODS_NAMES,
-  INDUSTRY_IDS,
   INDUSTRY_NAMES,
   isLinkActive,
   slotKey,
@@ -124,7 +123,7 @@ function LocationDetails({ board, era, built, prices, playerName, location, slot
                     <span className="text-parchment-50">
                       {' '}
                       — {possessive(playerName(tile.player))} {INDUSTRY_NAMES[tile.industry]}
-                      {tile.goods ? ` (${tile.goods} goods)` : ''}
+                      {tile.industry === 'cotton' ? ` (${tile.goods ?? 0} cotton)` : ''}
                     </span>
                   )}
                 </span>
@@ -136,9 +135,12 @@ function LocationDetails({ board, era, built, prices, playerName, location, slot
       {location.type === 'hub' && (
         <div className="mt-1.5">
           <p>
-            <span className="text-parchment-400">Buys:</span>{' '}
-            {INDUSTRY_IDS.every((i) => location.buys.includes(i)) ? 'Everything' : location.buys.map((b) => GOODS_NAMES[b]).join(', ')}
-            {prices?.[location.id] !== undefined && <span className="text-brass-200"> · £{prices[location.id]} each</span>}
+            <span className="text-parchment-400">Buys:</span> {location.buys.map((b) => GOODS_NAMES[b]).join(', ')}
+          </p>
+          <p>
+            <span className="text-parchment-400">Price now:</span>{' '}
+            <span className="font-semibold text-brass-200">£{prices?.[location.id] ?? location.price}</span> a unit, £1 less for each unit sold
+            {` (recovers £1 a round, up to £${location.price})`}
           </p>
           <p className="mt-1 flex gap-1">
             {location.buys.map((b) => (

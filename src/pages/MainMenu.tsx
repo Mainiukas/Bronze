@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { IconBook, IconCog } from '../components/icons'
 import { MapCard } from '../components/MapCard'
 import { ModeCard } from '../components/ModeCard'
 import { PlayButton } from '../components/PlayButton'
@@ -10,12 +11,17 @@ interface MainMenuProps {
   onModeChange: (id: GameModeId) => void
   mapId: MapId
   onMapChange: (id: MapId) => void
-  /** Opens match setup. */
-  onPlay: () => void
+  /** Opens the new-game setup. */
+  onNewGame: () => void
   /** A match in progress that can be resumed, if any. */
   savedMatch: { summary: string } | null
-  onResume: () => void
+  onContinue: () => void
   onAbandon: () => void
+  /** A saved match from an older version of the game, which can't be resumed. */
+  outdatedSave: boolean
+  onDiscardOutdated: () => void
+  onOpenRules: () => void
+  onOpenSettings: () => void
 }
 
 /**
@@ -25,7 +31,20 @@ interface MainMenuProps {
  * Desktop: hero + PLAY on the left (sticky), selectors on the right.
  * Mobile: stacked, with PLAY pinned to the bottom of the screen.
  */
-export function MainMenu({ modeId, onModeChange, mapId, onMapChange, onPlay, savedMatch, onResume, onAbandon }: MainMenuProps) {
+export function MainMenu({
+  modeId,
+  onModeChange,
+  mapId,
+  onMapChange,
+  onNewGame,
+  savedMatch,
+  onContinue,
+  onAbandon,
+  outdatedSave,
+  onDiscardOutdated,
+  onOpenRules,
+  onOpenSettings,
+}: MainMenuProps) {
   const mode = getGameMode(modeId)
   const map = getMap(mapId)
 
@@ -56,12 +75,36 @@ export function MainMenu({ modeId, onModeChange, mapId, onMapChange, onPlay, sav
               <button type="button" className="btn btn-ghost px-3" onClick={onAbandon}>
                 Abandon
               </button>
-              <button type="button" className="btn btn-primary px-5" onClick={onResume}>
-                Resume
+              <button type="button" className="btn btn-primary px-5" onClick={onContinue}>
+                Continue
               </button>
             </div>
           </div>
         )}
+
+        {/* A save the current version can't read */}
+        {outdatedSave && (
+          <div role="status" className="plate rivets mt-8 flex w-full flex-col gap-3 border-rust-400/40 px-5 py-4 text-left sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow text-rust-300">Saved match can’t be continued</p>
+              <p className="mt-0.5 text-sm text-parchment-200">It was saved by an older version of Bronze, whose rules have changed.</p>
+            </div>
+            <button type="button" className="btn btn-primary px-5" onClick={onDiscardOutdated}>
+              Start a new game
+            </button>
+          </div>
+        )}
+
+        <div className="mt-6 flex w-full gap-3">
+          <button type="button" className="btn btn-ghost flex-1" onClick={onOpenRules}>
+            <IconBook className="size-5" />
+            Rules
+          </button>
+          <button type="button" className="btn btn-ghost flex-1" onClick={onOpenSettings}>
+            <IconCog className="size-5" />
+            Settings
+          </button>
+        </div>
 
         {/* Current selection (desktop only; on mobile the PLAY button shows it) */}
         <dl className="plate rivets mt-10 hidden w-full animate-fade-up grid-cols-[auto_1fr] gap-x-6 gap-y-3 px-6 py-5 text-left lg:grid">
@@ -79,7 +122,7 @@ export function MainMenu({ modeId, onModeChange, mapId, onMapChange, onPlay, sav
         {/* PLAY: pinned to the bottom on mobile, inline on desktop */}
         <div className="fixed inset-x-0 bottom-0 z-20 bg-linear-to-t from-soot-950 via-soot-950/90 to-transparent px-4 pt-8 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 lg:static lg:mt-6 lg:w-full lg:bg-none lg:p-0">
           <div className="mx-auto max-w-md animate-fade-up lg:max-w-none">
-            <PlayButton onClick={onPlay} subtitle={`${mode.name} · ${map.name}`} />
+            <PlayButton onClick={onNewGame} label="NEW GAME" subtitle={`${mode.name} · ${map.name}`} />
           </div>
         </div>
       </section>

@@ -14,6 +14,7 @@ import {
   type BuiltState,
   type Era,
 } from '../data/board'
+import { INDUSTRIES } from '../game/rules'
 import { usePersistentState } from '../hooks/usePersistentState'
 import { useToast } from '../hooks/useToast'
 import { STORAGE_KEYS } from '../lib/storage'
@@ -21,10 +22,10 @@ import { STORAGE_KEYS } from '../lib/storage'
 /** A few tiles so the board opens showing what built slots and links look like. */
 const SAMPLE_BUILT: BuiltState = {
   slots: {
-    [slotKey('birmingham', 0)]: { player: 0, industry: 'cotton', goods: 2, level: 1 },
-    [slotKey('merthyr', 0)]: { player: 1, industry: 'iron', level: 2 },
-    [slotKey('bristol', 0)]: { player: 2, industry: 'port', level: 1 },
-    [slotKey('stoke', 0)]: { player: 3, industry: 'coal', level: 1 },
+    [slotKey('birmingham', 0)]: { player: 0, industry: 'cotton', goods: 2, stars: INDUSTRIES.cotton.prestige },
+    [slotKey('merthyr', 0)]: { player: 1, industry: 'iron', stars: INDUSTRIES.iron.prestige },
+    [slotKey('bristol', 0)]: { player: 2, industry: 'port', stars: INDUSTRIES.port.prestige },
+    [slotKey('stoke', 0)]: { player: 3, industry: 'coal', stars: INDUSTRIES.coal.prestige },
   },
   // "Both" links, so a token shows in either era: a barge in the canal era, a locomotive in the rail era.
   links: {
@@ -88,10 +89,10 @@ export function MapBoard() {
       const current = prev.slots[key]
       const slots = { ...prev.slots }
       // Empty or someone else's: take it. Yours: switch to the next allowed industry, then clear.
-      if (!current || current.player !== player) slots[key] = { player, industry: allowed[0], level: 1 }
+      if (!current || current.player !== player) slots[key] = { player, industry: allowed[0], stars: INDUSTRIES[allowed[0]].prestige }
       else {
         const next = allowed.indexOf(current.industry) + 1
-        if (next < allowed.length) slots[key] = { player, industry: allowed[next], level: 1 }
+        if (next < allowed.length) slots[key] = { player, industry: allowed[next], stars: INDUSTRIES[allowed[next]].prestige }
         else delete slots[key]
       }
       return { ...prev, slots }
@@ -312,7 +313,11 @@ function SelectionDetails({ board, era, built, selected }: { board: BoardData; e
           })}
         </ol>
       )}
-      {location.type === 'hub' && <p>Buys {location.buys.map((b) => GOODS_NAMES[b]).join(', ')}</p>}
+      {location.type === 'hub' && (
+        <p>
+          Buys {location.buys.map((b) => GOODS_NAMES[b]).join(', ')} · starts at £{location.price}
+        </p>
+      )}
       <ul className="text-parchment-400">
         {board.links
           .filter((l) => l.from === location.id || l.to === location.id)

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { DEFAULT_SETTINGS, LANGUAGES, type GameSettings, type LanguageCode } from '../data/settings'
+import { AI_SPEEDS, ANIMATION_SPEEDS, DEFAULT_SETTINGS, LANGUAGES, type GameSettings, type LanguageCode } from '../data/settings'
 import { IconChevronDown, IconCog } from './icons'
 import { ModalFrame } from './ModalFrame'
 
@@ -10,7 +10,7 @@ interface SettingsModalProps {
   onChange: (settings: GameSettings) => void
 }
 
-/** Settings dialog. Values are placeholders for now but are saved between visits. */
+/** Settings dialog. Saved between visits; changes apply at once, also in a match. */
 export function SettingsModal({ open, onClose, settings, onChange }: SettingsModalProps) {
   const update = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) =>
     onChange({ ...settings, [key]: value })
@@ -34,17 +34,59 @@ export function SettingsModal({ open, onClose, settings, onChange }: SettingsMod
       }
     >
       <div className="flex flex-col gap-6">
+        <SettingsGroup title="Game">
+          <Choice
+            id="animation-speed"
+            label="Animation speed"
+            description="Flashes and the shipping dot on the board."
+            options={ANIMATION_SPEEDS}
+            value={settings.animationSpeed}
+            onChange={(value) => update('animationSpeed', value)}
+          />
+          <Choice
+            id="ai-speed"
+            label="Computer speed"
+            description="The pause between a computer player’s actions."
+            options={AI_SPEEDS}
+            value={settings.aiSpeed}
+            onChange={(value) => update('aiSpeed', value)}
+          />
+          <Toggle
+            id="move-timer"
+            label="Move timer"
+            description="Each turn has a time limit; when it runs out, the rest of the turn is lost. Off: play untimed."
+            checked={settings.showMoveTimer}
+            onChange={(checked) => update('showMoveTimer', checked)}
+          />
+          <Toggle
+            id="show-log"
+            label="Show the match log"
+            checked={settings.showLog}
+            onChange={(checked) => update('showLog', checked)}
+          />
+          <Toggle
+            id="color-blind"
+            label="Colour-blind aid"
+            description="Adds each player’s letter (Y, B, P, R, W) to their colour: on the board, the panels and the log."
+            checked={settings.colorBlindAid}
+            onChange={(checked) => update('colorBlindAid', checked)}
+          />
+        </SettingsGroup>
+
         <SettingsGroup title="Audio">
+          <Toggle id="sound" label="Sound" checked={settings.soundOn} onChange={(checked) => update('soundOn', checked)} />
           <VolumeSlider
             id="master-volume"
             label="Master volume"
             value={settings.masterVolume}
+            disabled={!settings.soundOn}
             onChange={(value) => update('masterVolume', value)}
           />
           <VolumeSlider
             id="music-volume"
             label="Music volume"
             value={settings.musicVolume}
+            disabled={!settings.soundOn}
             onChange={(value) => update('musicVolume', value)}
           />
         </SettingsGroup>
@@ -71,13 +113,6 @@ export function SettingsModal({ open, onClose, settings, onChange }: SettingsMod
             </div>
           </div>
 
-          <Toggle
-            id="move-timer"
-            label="Show move timer"
-            description="Each turn has a time limit; when it runs out, the turn ends. Off: play untimed."
-            checked={settings.showMoveTimer}
-            onChange={(checked) => update('showMoveTimer', checked)}
-          />
         </SettingsGroup>
       </div>
     </ModalFrame>
@@ -96,16 +131,56 @@ function SettingsGroup({ title, children }: { title: string; children: ReactNode
   )
 }
 
+interface ChoiceProps<T extends string> {
+  id: string
+  label: string
+  description?: string
+  options: readonly T[]
+  value: T
+  onChange: (value: T) => void
+}
+
+/** A row of mutually exclusive options. */
+function Choice<T extends string>({ id, label, description, options, value, onChange }: ChoiceProps<T>) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div>
+        <span id={`${id}-label`} className="block font-medium text-parchment-100">
+          {label}
+        </span>
+        {description && <span className="block text-sm text-parchment-400">{description}</span>}
+      </div>
+      <div role="radiogroup" aria-labelledby={`${id}-label`} className="flex overflow-hidden rounded-lg border border-bronze-500/35">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={value === option}
+            onClick={() => onChange(option)}
+            className={`min-h-10 px-3 text-sm font-semibold tracking-wide capitalize transition ${
+              value === option ? 'bg-bronze-500/35 text-parchment-50' : 'text-parchment-400 hover:text-parchment-100'
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface VolumeSliderProps {
   id: string
   label: string
   value: number
+  disabled?: boolean
   onChange: (value: number) => void
 }
 
-function VolumeSlider({ id, label, value, onChange }: VolumeSliderProps) {
+function VolumeSlider({ id, label, value, disabled = false, onChange }: VolumeSliderProps) {
   return (
-    <div>
+    <div className={disabled ? 'opacity-45' : undefined}>
       <div className="mb-1 flex items-baseline justify-between">
         <label htmlFor={id} className="font-medium text-parchment-100">
           {label}
@@ -121,6 +196,7 @@ function VolumeSlider({ id, label, value, onChange }: VolumeSliderProps) {
         max={100}
         step={1}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
         className="bz-range"
         style={{ '--fill': `${value}%` } as CSSProperties}

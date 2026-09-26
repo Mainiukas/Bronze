@@ -359,20 +359,9 @@ export function rectGap(a: Rect, b: Rect): number {
   return Math.hypot(gx, gy)
 }
 
-/* ---- Shapes --------------------------------------------------------------- */
+/* ---- Percentages ---------------------------------------------------------- */
 
 /** Round a percentage to one decimal, clamped to the image. */
 export function roundPercent(value: number): number {
   return Math.round(Math.min(100, Math.max(0, value)) * 10) / 10
-}
-
-/**
- * A flat hexagon w × h centred on (cx, cy): pointed ends left and right, flat
- * top and bottom. `tip` is how far the points reach past the flat edges.
- */
-export function flatHexagonPath(cx: number, cy: number, w: number, h: number, tip = h / 2): string {
-  const f = (n: number) => Math.round(n * 100) / 100
-  const x0 = cx - w / 2
-  const x1 = cx + w / 2
-  return `M${f(x0)} ${f(cy)}L${f(x0 + tip)} ${f(cy - h / 2)}H${f(x1 - tip)}L${f(x1)} ${f(cy)}L${f(x1 - tip)} ${f(cy + h / 2)}H${f(x0 + tip)}Z`
 }

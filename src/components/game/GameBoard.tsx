@@ -1,11 +1,9 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import type { MapBoardData } from '../../data/maps'
-import { makesGoods } from '../../game/engine'
 import { INDUSTRIES } from '../../game/rules'
 import type { Board, Building, BoardTown, GameState, IndustryKind } from '../../game/types'
 import { INDUSTRY_SHORT } from '../../data/board'
 import { INDUSTRY_ICON_URLS } from '../board/assets'
-import { seatColor } from './glyphs'
 
 /** Board geometry, in map units (the board is 160 × 100). */
 const PLOT = 4.6
@@ -18,10 +16,10 @@ export interface BoardHighlights {
   plots?: Set<string>
   /** Routes that can be clicked, with a short cost label. */
   routes?: Map<string, string>
-  /** Mills that can be picked for shipping. */
-  mills?: Set<number>
-  /** The mill currently picked for shipping. */
-  selectedMill?: number | null
+  /** Industries that can be picked to ship from. */
+  sources?: Set<number>
+  /** The industry currently picked to ship from. */
+  selectedSource?: number | null
   /** Markets that can be shipped to, with a short payout label. */
   markets?: Map<string, string>
 }
@@ -33,9 +31,11 @@ interface GameBoardProps {
   /** Seat whose network is outlined. */
   viewer: number | null
   networkOfViewer: Set<string>
+  /** Each player's colour. */
+  colorOf: (player: number) => string
   onPlot?: (townId: string, slot: number) => void
   onRoute?: (routeId: string) => void
-  onMill?: (buildingId: number) => void
+  onSource?: (buildingId: number) => void
   onMarket?: (townId: string) => void
 }
 
@@ -77,9 +77,10 @@ export function GameBoard({
   highlights,
   viewer,
   networkOfViewer,
+  colorOf,
   onPlot,
   onRoute,
-  onMill,
+  onSource,
   onMarket,
 }: GameBoardProps) {
   const board: Board = game.board
@@ -140,7 +141,7 @@ export function GameBoard({
               </g>
             )}
             {built && (
-              <g style={{ color: seatColor(owner) }} stroke="currentColor">
+              <g style={{ color: colorOf(owner) }} stroke="currentColor">
                 {routeKind === 'rail' && (
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={2.4} strokeDasharray="0.35 1" opacity={0.85} />
                 )}
@@ -212,7 +213,7 @@ export function GameBoard({
                 cy={town.y}
                 r={(isMarket ? MARKET_R : TOWN_R) + 1.5}
                 fill="none"
-                stroke={seatColor(viewer)}
+                stroke={colorOf(viewer)}
                 strokeWidth={0.35}
                 strokeDasharray="0.9 0.6"
                 opacity={0.9}
@@ -259,12 +260,13 @@ export function GameBoard({
                 allowed={allowed}
                 building={buildings.get(`${town.id}#${slot}`)}
                 clickable={highlights.plots?.has(`${town.id}#${slot}`) ?? false}
-                millPick={highlights.mills}
-                selectedMill={highlights.selectedMill ?? null}
+                sourcePick={highlights.sources}
+                selectedSource={highlights.selectedSource ?? null}
                 flash={event?.type === 'build' && event.townId === town.id && event.slot === slot ? game.nextId : null}
                 onPlot={onPlot}
-                onMill={onMill}
+                onSource={onSource}
                 ownerName={(b) => game.players[b.owner].name}
+                colorOf={colorOf}
               />
             ))}
 
@@ -292,7 +294,7 @@ export function GameBoard({
               <circle key={game.nextId} cx={town.x} cy={town.y} r={MARKET_R + 1} className="board-flash fill-none stroke-brass-200" strokeWidth={0.8} />
             )}
             <title>
-              {`${town.name}${isMarket ? ` — market, goods sell for £${game.prices[town.id]}` : ''}`}
+              {`${town.name}${isMarket ? ` — market town, buys cotton, coal and iron at £${game.prices[town.id]} a unit` : ''}`}
             </title>
           </g>
         )
@@ -307,28 +309,30 @@ interface PlotProps {
   allowed: IndustryKind[]
   building: Building | undefined
   clickable: boolean
-  millPick: Set<number> | undefined
-  selectedMill: number | null
+  sourcePick: Set<number> | undefined
+  selectedSource: number | null
   flash: number | null
   onPlot?: (townId: string, slot: number) => void
-  onMill?: (buildingId: number) => void
+  onSource?: (buildingId: number) => void
   ownerName: (building: Building) => string
+  colorOf: (player: number) => string
 }
 
 /** One building plot: empty (showing what it allows) or holding an industry. */
-function Plot({ town, slot, allowed, building, clickable, millPick, selectedMill, flash, onPlot, onMill, ownerName }: PlotProps) {
+function Plot({ town, slot, allowed, building, clickable, sourcePick, selectedSource, flash, onPlot, onSource, ownerName, colorOf }: PlotProps) {
   const { x, y } = plotOrigin(town, slot)
-  const pickable = building !== undefined && (millPick?.has(building.id) ?? false)
-  const selected = building !== undefined && building.id === selectedMill
+  const pickable = building !== undefined && (sourcePick?.has(building.id) ?? false)
+  const selected = building !== undefined && building.id === selectedSource
+  const isMill = building !== undefined && INDUSTRIES[building.kind].ships === 'cotton'
   const allowedNames = allowed.map((kind) => INDUSTRIES[kind].name).join(' or ')
 
   let content: ReactNode
   if (building) {
     content = (
-      <g style={{ color: seatColor(building.owner) }}>
+      <g style={{ color: colorOf(building.owner) }}>
         <rect x={x} y={y} width={PLOT} height={PLOT} rx={0.8} fill="currentColor" fillOpacity={0.22} stroke="currentColor" strokeWidth={0.4} />
         <Glyph kind={building.kind} x={x + 0.6} y={y + 0.6} size={PLOT - 1.2} />
-        {makesGoods(building.kind) && building.goods > 0 && (
+        {isMill && building.goods > 0 && (
           <g>
             <circle cx={x + PLOT} cy={y} r={1.35} className="fill-brass-300 stroke-soot-950" strokeWidth={0.3} />
             <text x={x + PLOT} y={y + 0.8} textAnchor="middle" className="fill-soot-950 font-display font-extrabold" fontSize={2.1}>
@@ -367,13 +371,13 @@ function Plot({ town, slot, allowed, building, clickable, millPick, selectedMill
   }
 
   const label = building
-    ? `${INDUSTRIES[building.kind].name} in ${town.name}, owned by ${ownerName(building)}${makesGoods(building.kind) ? `, ${building.goods} goods` : ''}`
-    : `Empty plot in ${town.name} for a ${allowedNames}`
+    ? `${town.name}, plot ${slot + 1}: ${ownerName(building)}’s ${INDUSTRIES[building.kind].name.toLowerCase()}${isMill ? `, ${building.goods} cotton` : ''}`
+    : `${town.name}, plot ${slot + 1}: ${allowedNames.toLowerCase()}, free`
 
   const interactive = clickable || pickable
   const handle = () => {
     if (clickable) onPlot?.(town.id, slot)
-    else if (pickable && building) onMill?.(building.id)
+    else if (pickable && building) onSource?.(building.id)
   }
 
   return (

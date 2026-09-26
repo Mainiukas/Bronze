@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { HashRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router'
 import { FriendsPanel } from './components/FriendsPanel'
 import { CreditsModal, HowToPlayModal } from './components/InfoModals'
-import { MatchSetupDialog } from './components/MatchSetupDialog'
+import { MatchSetupDialog, type MatchSetup } from './components/MatchSetupDialog'
 import type { MenuAction } from './components/MoreMenu'
 import { SceneBackground } from './components/SceneBackground'
 import { SettingsModal } from './components/SettingsModal'
@@ -12,13 +12,14 @@ import { EMPTY_STATS, parseStats, recordMatch, type Achievement } from './data/a
 import { DEFAULT_GAME_MODE_ID, getGameMode, isGameModeId } from './data/gameModes'
 import { DEFAULT_MAP_ID, getMap, isMapId } from './data/maps'
 import { PATHS } from './data/navigation'
-import { DEFAULT_SETTINGS, parseSettings } from './data/settings'
-import { createGame, parseSavedGame } from './game/engine'
-import type { GameState, SeatSetup } from './game/types'
+import { ANIMATION_SCALE, DEFAULT_SETTINGS, parseSettings } from './data/settings'
+import { createGame, parseSavedGame, readSavedGame } from './game/engine'
+import type { GameState } from './game/types'
 import { usePersistentState } from './hooks/usePersistentState'
 import { useToast } from './hooks/useToast'
 import { setVolumes } from './lib/sound'
-import { STORAGE_KEYS } from './lib/storage'
+import { randomSeed } from './lib/random'
+import { readStorage, removeStorage, STORAGE_KEYS } from './lib/storage'
 import { Achievements } from './pages/Achievements'
 import { Game } from './pages/Game'
 import { Locker } from './pages/Locker'
@@ -58,18 +59,23 @@ function AppShell() {
     isMapId(raw) ? raw : undefined,
   )
   const [settings, setSettings] = usePersistentState(STORAGE_KEYS.settings, DEFAULT_SETTINGS, parseSettings)
+  // A save from an older version can't be resumed: say so (once) instead of silently dropping it.
+  const [outdatedSave, setOutdatedSave] = useState(() => readSavedGame(readStorage(STORAGE_KEYS.match)).status === 'outdated')
+  // Saved after every action (and every state change), so Continue resumes exactly where play stopped.
   const [game, setGame] = usePersistentState<GameState | null>(STORAGE_KEYS.match, null, parseSavedGame)
   const [stats, setStats] = usePersistentState(STORAGE_KEYS.stats, EMPTY_STATS, parseStats)
-  // Seats of the last match started, for Rematch.
-  const [lastSeats, setLastSeats] = useState<SeatSetup[] | null>(null)
 
-  useEffect(() => setVolumes(settings.masterVolume, settings.musicVolume), [settings.masterVolume, settings.musicVolume])
+  useEffect(
+    () => setVolumes(settings.soundOn ? settings.masterVolume : 0, settings.soundOn ? settings.musicVolume : 0),
+    [settings.soundOn, settings.masterVolume, settings.musicVolume],
+  )
+  // Board and banner animations read this: 0 turns them off.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--anim-scale', String(ANIMATION_SCALE[settings.animationSpeed]))
+    document.documentElement.dataset.animations = settings.animationSpeed === 'off' ? 'off' : 'on'
+  }, [settings.animationSpeed])
 
   const handleMenuAction = (action: MenuAction) => {
-    if (action === 'logout') {
-      notify('Accounts are coming soon — nothing to log out of yet')
-      return
-    }
     if (action === 'board') {
       navigate(PATHS.board)
       return
@@ -77,9 +83,12 @@ function AppShell() {
     setOverlay(action)
   }
 
-  const startMatch = (seats: SeatSetup[], mode = modeId, map = mapId) => {
-    setGame(createGame({ modeId: mode, mapId: map, seats }))
-    setLastSeats(seats)
+  // Changes with every new match, so the match screen starts fresh (banners, hand-offs, choices).
+  const [matchKey, setMatchKey] = useState(0)
+  const startMatch = (setup: MatchSetup) => {
+    setGame(createGame(setup))
+    setMatchKey((k) => k + 1)
+    setOutdatedSave(false)
     setOverlay(null)
     navigate(PATHS.play)
   }
@@ -99,10 +108,11 @@ function AppShell() {
     navigate(PATHS.mainMenu)
   }
 
+  /** The same seats (names, colours, AI levels) on the same mode and map, with a new seed. */
   const rematch = () => {
     if (!game) return
-    const seats = lastSeats ?? game.players.map((p) => ({ name: p.name, isAI: p.isAI }))
-    startMatch(seats, game.modeId, game.mapId)
+    const seats = game.players.map((p) => ({ name: p.name, isAI: p.isAI, color: p.color, ...(p.aiLevel ? { aiLevel: p.aiLevel } : {}) }))
+    startMatch({ modeId: game.modeId, mapId: game.mapId, seats, seed: randomSeed() })
   }
 
   const savedMatch =
@@ -122,6 +132,7 @@ function AppShell() {
           element={
             game ? (
               <Game
+                key={matchKey}
                 game={game}
                 onGameChange={setGame}
                 onMatchFinished={handleMatchFinished}
@@ -130,6 +141,7 @@ function AppShell() {
                 settings={settings}
                 onOpenRules={() => setOverlay('how-to-play')}
                 onOpenSettings={() => setOverlay('settings')}
+                overlayOpen={overlay !== null}
               />
             ) : (
               <Navigate to={PATHS.mainMenu} replace />
@@ -145,13 +157,21 @@ function AppShell() {
                 onModeChange={setModeId}
                 mapId={mapId}
                 onMapChange={setMapId}
-                onPlay={() => setOverlay('setup')}
+                onNewGame={() => setOverlay('setup')}
                 savedMatch={savedMatch}
-                onResume={() => navigate(PATHS.play)}
+                onContinue={() => navigate(PATHS.play)}
                 onAbandon={() => {
                   setGame(null)
                   notify('Match abandoned')
                 }}
+                outdatedSave={outdatedSave && !game}
+                onDiscardOutdated={() => {
+                  removeStorage(STORAGE_KEYS.match)
+                  setOutdatedSave(false)
+                  setOverlay('setup')
+                }}
+                onOpenRules={() => setOverlay('how-to-play')}
+                onOpenSettings={() => setOverlay('settings')}
               />
             }
           />
@@ -167,10 +187,12 @@ function AppShell() {
       <MatchSetupDialog
         open={overlay === 'setup'}
         onClose={closeOverlay}
-        mode={getGameMode(modeId)}
-        map={getMap(mapId)}
+        modeId={modeId}
+        onModeChange={setModeId}
+        mapId={mapId}
+        onMapChange={setMapId}
         replacesMatch={savedMatch !== null}
-        onStart={(seats) => startMatch(seats)}
+        onStart={startMatch}
       />
       <FriendsPanel open={overlay === 'friends'} onClose={closeOverlay} />
       <SettingsModal

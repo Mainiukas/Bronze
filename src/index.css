@@ -206,7 +206,7 @@ body {
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-display text-base font-bold tracking-[0.12em] uppercase transition duration-150 select-none active:translate-y-px disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-display text-base font-bold tracking-[0.12em] uppercase transition duration-150 select-none active:translate-y-px disabled:pointer-events-none disabled:opacity-40;
   }
 
   /* Use together with .btn, e.g. className="btn btn-primary". */
@@ -281,6 +281,9 @@ dialog.bz-dialog--modal {
   width: min(32rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   transform: translateY(16px) scale(0.97);
+}
+dialog.bz-dialog--modal.bz-dialog--wide {
+  width: min(46rem, calc(100vw - 2rem));
 }
 
 /* Drawer that slides in from the left edge */
@@ -522,6 +525,41 @@ dialog.bz-dialog--drawer-left {
     opacity: 0;
     transform: scale(2.2);
   }
+}
+
+/* The rail-era banner sweeps in. */
+.era-banner {
+  animation: era-banner calc(0.5s * var(--anim-scale, 1)) ease-out both;
+}
+
+@keyframes era-banner {
+  from {
+    opacity: 0;
+    transform: scaleX(0.4);
+  }
+}
+
+/* Animation speed setting: board animations stretch or shrink with --anim-scale; "off" removes them. */
+.board-flash {
+  animation-duration: calc(1.2s * var(--anim-scale, 1));
+}
+.board-flow-lg {
+  animation-duration: calc(0.9s * var(--anim-scale, 1));
+}
+:root[data-animations='off'] .board-flash,
+:root[data-animations='off'] .board-flow-lg,
+:root[data-animations='off'] .board-flow,
+:root[data-animations='off'] .era-banner {
+  animation: none;
+}
+:root[data-animations='off'] .board-flash {
+  opacity: 0;
+}
+
+/* Focus rings on the board's SVG buttons (slots, bubbles, markets). */
+svg [role='button']:focus-visible {
+  outline: 3px solid var(--color-brass-200);
+  outline-offset: 2px;
 }
 
 /* ==========================================================================

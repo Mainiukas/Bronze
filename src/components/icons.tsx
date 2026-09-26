@@ -89,15 +89,6 @@ export function IconUsers(props: IconProps) {
   )
 }
 
-export function IconUserPlus(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <circle cx="10" cy="8" r="3.5" />
-      <path d="M3.5 19.5c0-3.5 2.9-6 6.5-6s6.5 2.5 6.5 6M19 8v6M16 11h6" />
-    </Svg>
-  )
-}
-
 export function IconCog(props: IconProps) {
   return (
     <Svg {...props}>
@@ -119,14 +110,6 @@ export function IconStar(props: IconProps) {
   return (
     <Svg {...props}>
       <path d="M12 3.5l2.5 5.3 5.8.7-4.3 4 1.1 5.7L12 16.4l-5.1 2.8L8 13.5l-4.3-4 5.8-.7z" />
-    </Svg>
-  )
-}
-
-export function IconLogout(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M9.5 20H6a2 2 0 01-2-2V6a2 2 0 012-2h3.5M15.5 16l4-4-4-4M19.5 12H9" />
     </Svg>
   )
 }
