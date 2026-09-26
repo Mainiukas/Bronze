@@ -8,9 +8,8 @@ Play against computer opponents or pass & play on one device.
 Each round, every player takes a turn of two actions:
 
 - **Build an industry** in a town in your network: a Cotton mill (makes the
-  goods), a Port, a Shipyard, an Iron works or a Coal mine. The original
-  schematic maps also have Engine Works (prestige every round). Your first
-  build can go anywhere.
+  goods), a Port, a Shipyard, an Iron works or a Coal mine. These five are
+  the only industries. Your first build can go anywhere.
 - **Build a link**: a canal or railway on a route touching your network.
 - **Ship goods** to a market that buys them, over built links (anyone's).
   Money and +1★ per goods, doubled over 2+ links. Using an opponent's link
@@ -31,19 +30,20 @@ The default map is played on the illustrated board (`assets/map.webp`), with a
 few extra rules:
 
 - **Eras.** The match starts in the canal era; the rail era begins half way
-  (round 6 of 10 in Normal). Only routes of the current era's kind can be
-  built. A route that allows both is built as the current era's kind.
-  Railways cost £5 plus 1 coal. Canals dug earlier keep carrying goods.
+  (round 6 of 10 in Normal). Only the current era's links are on the board:
+  canals, then railways. A link marked for both is a canal in the canal era
+  and a railway in the rail era. Railways cost £5 plus 1 coal. When the rail
+  era begins, every canal link comes off the board, as in Brass.
 - **Trade hubs** (The North, London, West Wales) are the markets. Cotton is
-  the goods you ship; a hub's price drops as goods are sold. The icons under
-  each ribbon (`buys` in `board.json`) are what the hub trades in; only
+  the goods you ship; a hub's price drops as goods are sold. The pictures
+  under each ribbon (`buys` in `board.json`) are what the hub trades in; only
   cotton is shipped in matches.
 - **Ports** buy any goods at £3 each and pay £1 a round. Shipping to someone
   else's port pays them £1 per goods.
-- **Stops** (Brecon, Lichfield, Reading, Taunton) have no slots, but routes
-  pass through them.
-- **Rail-era towns** (Plymouth and Taunton, `"era": "rail"`) can't be reached
-  by canal or built in until the rail era. Plymouth has the only shipyard.
+- **Stops** (Brecon, Reading, Taunton) have no slots, but routes pass through them.
+- **Rail-era places** (The North, Plymouth and Taunton, `"era": "rail"`) can
+  only be reached by rail; nothing can be built in Plymouth before the rail
+  era. Plymouth has the only shipyard.
 - **Smaller modes** use the heart of the map: 13 locations in Bullet, 20 in
   Blitz and all 25 in Normal (the `ring` field in `board.json`).
 
@@ -91,33 +91,47 @@ and the selection come in as props, and clicks come out through
 toggle and a sandbox for placing tiles. Matches on Wales & the West use the
 same component, with `targets`, `prices`, `closed` and `recent` props.
 
-Layers, bottom to top: map, route shadows, canals, rails, link markers,
-plaques and tiles, badges, hover/selection, tooltips.
+Layers, bottom to top: map, route shadows, route textures, link spaces, link
+tokens, plaques and tiles, badges, hover/selection, tooltips.
 
-- **Cities**: 22-unit tiles (a row, or 2 × 2 for four slots) over a flat name
-  plate in the region's colour. **Stops**: silver plaques with two emblems.
-  **Hubs**: merchant slots, a medallion with a scene, a ribbon, the number
-  and bonus badges, and icons of what they buy.
-- **Routes** are curves (seeded automatic bends of 8–15 %, turned to avoid
-  other plaques, or a spline through a link's `points`), drawn by laying the
-  rail and canal textures along them in rotated slices. "Both" links draw a
-  canal and a railway 9 units either side of the centre line. The other
-  era's links fade to 55 % and can't be clicked.
+- **Only the era's links are drawn**: canal and "both" links (as a canal) in
+  the canal era, rail and "both" links (as a railway) in the rail era.
+  Places reached only by rail keep a locomotive badge.
+- **Cities**: 34-unit squares (a row, or 2 × 2 for four slots) with the
+  industry pictures, over a flat name plate in the region's colour. Built
+  tiles show the owner's colour, the picture and the level. **Stops**: silver
+  plaques with two emblems. **Hubs**: two merchant spaces, a medallion with the
+  hub's photo, a ribbon, the number and bonus badges, and what they buy.
+- **Routes** are curves (seeded bends of 8–15 %, or a spline through a link's
+  `points`) measured with `getTotalLength()`/`getPointAtLength()` and drawn by
+  laying the texture along them in pieces edge to edge: each piece is a quad
+  between the route's normals, so pieces never overlap or gap and the last
+  stops exactly at the end.
+- **Link spaces** are flat hexagons with the link symbol; built links show the
+  owner's token (a barge or a locomotive, per era). Player colours are the
+  token colours (yellow, blue, purple, red, white); any other colour gets a
+  drawn token with the barge or locomotive art.
 - **Layout**: plaques and tile groups are nudged apart (never the location
-  points) until everything is at least 8 units apart, with room for each
-  link's marker. A location's `labelOffset` pins its group by hand.
+  points) until groups, link spaces and tokens are at least 8 units apart.
+  Route ends fan out around each group (at least 14 apart), and bends are
+  flipped or increased until no route runs over another route or a group; a
+  group still in a route's way steps aside and the layout is redone. A
+  location's `labelOffset` pins its group by hand. Development builds log
+  anything left over.
 
-**Art files** (all optional; anything missing falls back to drawn SVG):
-`assets/map.png` (else `map.webp`), `assets/icons/{loom,anchor,shipyard,iron,coal}.png`,
-`assets/textures/{rail,canal}.png` (seamless left to right, 1084 × 256 and
-1639 × 256) and `assets/hubs/<hub id>.png` for a hub's medallion. The icons and
-textures in the repo are stand-ins; replace the files to change the art.
+**Art** (in `assets/`, preloaded before the board first draws; anything
+missing or failing is logged and drawn instead): `map.png` (else `map.webp`),
+`icons/{loom,anchor,shipyard,iron,coal}.png` (the only industry icons in the
+game), `textures/{rail,canal}.png`, `tokens/` (link symbol, merchant, the
+tokens per colour, and the barge and locomotive art) and `hubs/<hub id>.png`.
 
 Coordinates in `board.json` are percentages of the image (0–100), so the
 overlay stays aligned at any size. The network is held to its design by
-`topologyProblems`: from The North, canal and "both" links reach everything
-but the rail-era towns, and the degrees add up to 78 (39 links). Development
-builds refuse to start if it breaks; `npm test` checks it too.
+`designProblems`: from Birmingham, canal and "both" links reach everything but
+the rail-era places; rail and "both" links reach everything; degrees add up to
+78 (16 both, 6 canal, 17 rail links); and 2, 4, 10 and 3 cities have 4, 3, 2
+and 1 tiles. Development builds refuse to start if it breaks; `npm test`
+checks it too, along with the layout.
 
 **Calibrating** (edit mode):
 
@@ -125,7 +139,9 @@ builds refuse to start if it breaks; `npm test` checks it too.
 2. Drag a crosshair to move a location. Drag a plaque or tile group to place it
    by hand (double-click it to go back to automatic). Drag a link's "+" to add
    a bend point (up to 3); drag the squares to move them, double-click to
-   remove. Arrow keys nudge the last one by 0.1 % (Shift: 1 %).
+   remove. Arrow keys nudge the last one by 0.1 % (Shift: 1 %). Drags preview
+   as you move and the board is laid out again when you let go. Use the era
+   switch beside the board to check both eras' links.
 3. Click **Export** (or **Download**) and paste it over `src/data/board.json`.
    `npm test` checks the file stays valid.
 
@@ -143,11 +159,12 @@ src/
     ai.ts                 Computer player (plans both actions of its turn)
     types.ts              GameState and action types
     engine.test.ts        Rules tests and simulated matches
-    illustrated.test.ts   Wales & the West rules: eras, stops, hubs, ports, rail-era towns
+    illustrated.test.ts   Wales & the West rules: eras, stops, hubs, ports, rail-era places
   App.tsx                 Router, layout, app-wide state (selection, settings, saved match, stats)
   components/board/       Illustrated map board: IllustratedBoard (view), parts (SVG pieces),
-                          layout (placement and collisions), geometry (curves, texture
-                          slices), assets (art files and fallbacks), style, icons, BoardTooltip
+                          layout (placement, route fan-out, collisions), geometry (curves,
+                          texture pieces, hulls), sampling (getPointAtLength), assets
+                          (art files, preloading, fallbacks), style, icons, BoardTooltip
   main.tsx                Entry point; loads the bundled fonts
   index.css               Theme tokens (colors, fonts, animations) and shared component classes
   components/
@@ -177,7 +194,7 @@ src/
     maps.ts               Maps: the illustrated map plus schematic maps (towns, plots, routes, decoration)
     board.json            Map board data: locations, slots, links (edit via #/board?edit=1)
     board.ts              Board types, validation, export formatting, era rules, network checks
-    board.test.ts         Board data, network design, curves, texture slices and layout
+    board.test.ts         Board data, the design checks, curves, texture pieces and layout
     achievements.ts       Achievements and lifetime stats
     navigation.ts         Tab list and route paths
     settings.ts           Settings shape, defaults and validation

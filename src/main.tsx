@@ -9,7 +9,11 @@ import '@fontsource/barlow/latin-400.css'
 import '@fontsource/barlow/latin-500.css'
 import '@fontsource/barlow/latin-600.css'
 import App from './App.tsx'
+import { preloadBoardImages } from './components/board/assets'
 import './index.css'
+
+// Start loading the board's pictures now, so the map board is ready when it opens.
+void preloadBoardImages()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

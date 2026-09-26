@@ -28,7 +28,7 @@ export interface MapTown {
   /**
    * Building plots. Each string is one plot; its letters are the
    * industries allowed there: C coal mine, I iron works, M cotton mill,
-   * W engine works. "CI" means a plot that takes either.
+   * S shipyard. "CI" means a plot that takes either.
    */
   readonly slots: readonly string[]
 }
@@ -116,15 +116,15 @@ export const MAPS = [
         { path: 'M160 66 C 142 60 128 72 112 66 S 88 58 70 64 S 42 60 22 64', width: 3.5 },
       ],
       towns: [
-        { id: 'saltport', name: 'Saltport', x: 16, y: 38, ring: 1, market: 6, slots: ['M', 'W'] },
+        { id: 'saltport', name: 'Saltport', x: 16, y: 38, ring: 1, market: 6, slots: ['M', 'S'] },
         { id: 'ferrybridge', name: 'Ferrybridge', x: 44, y: 20, ring: 1, slots: ['CI', 'M'] },
         { id: 'lowford', name: 'Lowford', x: 42, y: 80, ring: 1, slots: ['C', 'M'] },
-        { id: 'kingsferry', name: 'Kingsferry', x: 74, y: 46, ring: 1, market: 5, slots: ['I', 'M', 'W'] },
+        { id: 'kingsferry', name: 'Kingsferry', x: 74, y: 46, ring: 1, market: 5, slots: ['I', 'M', 'S'] },
         { id: 'ashcombe', name: 'Ashcombe', x: 76, y: 12, ring: 2, slots: ['C', 'C'] },
         { id: 'weirside', name: 'Weirside', x: 100, y: 82, ring: 1, slots: ['M', 'I'] },
         { id: 'halton-cross', name: 'Halton Cross', x: 108, y: 28, ring: 1, slots: ['CI', 'M'] },
         { id: 'brindlemoor', name: 'Brindlemoor', x: 138, y: 12, ring: 3, slots: ['C', 'I'] },
-        { id: 'eastmere', name: 'Eastmere', x: 142, y: 48, ring: 2, market: 4, slots: ['M', 'W'] },
+        { id: 'eastmere', name: 'Eastmere', x: 142, y: 48, ring: 2, market: 4, slots: ['M', 'S'] },
         { id: 'dunmore', name: 'Dunmore', x: 136, y: 84, ring: 3, slots: ['C', 'M'] },
       ],
       links: [
@@ -165,12 +165,12 @@ export const MAPS = [
         { id: 'sootley', name: 'Sootley', x: 112, y: 12, ring: 2, slots: ['C', 'I'] },
         { id: 'emberton', name: 'Emberton', x: 144, y: 20, ring: 3, slots: ['C', 'M'] },
         { id: 'cinderford', name: 'Cinderford', x: 26, y: 50, ring: 1, slots: ['CI', 'M'] },
-        { id: 'dudwell', name: 'Dudwell', x: 60, y: 48, ring: 1, market: 5, slots: ['M', 'W', 'I'] },
+        { id: 'dudwell', name: 'Dudwell', x: 60, y: 48, ring: 1, market: 5, slots: ['M', 'S', 'I'] },
         { id: 'anvil-green', name: 'Anvil Green', x: 94, y: 50, ring: 1, slots: ['CI', 'M'] },
-        { id: 'furnace-end', name: 'Furnace End', x: 128, y: 50, ring: 2, market: 4, slots: ['I', 'W'] },
+        { id: 'furnace-end', name: 'Furnace End', x: 128, y: 50, ring: 2, market: 4, slots: ['I', 'S'] },
         { id: 'hollowmere', name: 'Hollowmere', x: 14, y: 84, ring: 3, slots: ['C', 'M'] },
         { id: 'lockside', name: 'Lockside', x: 44, y: 84, ring: 1, slots: ['M', 'C'] },
-        { id: 'wednesfold', name: 'Wednesfold', x: 78, y: 82, ring: 1, market: 5, slots: ['M', 'W'] },
+        { id: 'wednesfold', name: 'Wednesfold', x: 78, y: 82, ring: 1, market: 5, slots: ['M', 'S'] },
         { id: 'kettleby', name: 'Kettleby', x: 112, y: 84, ring: 2, slots: ['M', 'I'] },
         { id: 'ashpit', name: 'Ashpit', x: 146, y: 82, ring: 3, slots: ['C', 'M'] },
       ],
@@ -233,11 +233,11 @@ export const MAPS = [
         { id: 'windhill', name: 'Windhill', x: 50, y: 12, ring: 3, slots: ['C', 'I'] },
         { id: 'high-saddle', name: 'High Saddle', x: 86, y: 24, ring: 1, slots: ['M', 'CI'] },
         { id: 'moorend', name: 'Moorend', x: 120, y: 12, ring: 3, slots: ['C', 'M'] },
-        { id: 'edgecliff', name: 'Edgecliff', x: 146, y: 30, ring: 2, slots: ['M', 'W'] },
-        { id: 'millbrook', name: 'Millbrook', x: 20, y: 58, ring: 1, market: 5, slots: ['M', 'M', 'W'] },
+        { id: 'edgecliff', name: 'Edgecliff', x: 146, y: 30, ring: 2, slots: ['M', 'S'] },
+        { id: 'millbrook', name: 'Millbrook', x: 20, y: 58, ring: 1, market: 5, slots: ['M', 'M', 'S'] },
         { id: 'clough-end', name: 'Clough End', x: 52, y: 60, ring: 1, slots: ['M', 'C'] },
         { id: 'greystones', name: 'Greystones', x: 86, y: 58, ring: 1, market: 4, slots: ['CI', 'M'] },
-        { id: 'loomfield', name: 'Loomfield', x: 140, y: 64, ring: 2, market: 5, slots: ['M', 'W'] },
+        { id: 'loomfield', name: 'Loomfield', x: 140, y: 64, ring: 2, market: 5, slots: ['M', 'S'] },
         { id: 'brookside', name: 'Brookside', x: 36, y: 88, ring: 1, slots: ['M', 'I'] },
         { id: 'beckfoot', name: 'Beckfoot', x: 72, y: 88, ring: 1, slots: ['M', 'C'] },
         { id: 'shuttle-end', name: 'Shuttle End', x: 108, y: 86, ring: 2, slots: ['M', 'M'] },

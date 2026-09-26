@@ -389,9 +389,10 @@ function PaintedBoard({ game, viewer, network, targets, selectedSource, onSelect
   const inPlay = new Set(game.board.towns.map((t) => t.id))
   const built: BuiltState = { slots: {}, links: {} }
   for (const b of game.buildings) {
-    built.slots[slotKey(b.townId, b.slot)] = { player: b.owner, industry: b.kind as Industry, goods: b.goods }
+    // Every industry in this game is level 1.
+    built.slots[slotKey(b.townId, b.slot)] = { player: b.owner, industry: b.kind as Industry, goods: b.goods, level: 1 }
   }
-  for (const [id, link] of Object.entries(game.links)) built.links[id] = { player: link.owner, kind: link.kind }
+  for (const [id, link] of Object.entries(game.links)) built.links[id] = { player: link.owner }
   const source = selectedSource === null ? undefined : game.buildings.find((b) => b.id === selectedSource)
   const event = game.lastEvent
   const recent =

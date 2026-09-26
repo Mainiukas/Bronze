@@ -42,7 +42,8 @@ describe('board sizes', () => {
     expect(brecon.slots).toEqual([])
     const london = board.towns.find((t) => t.id === 'london')!
     expect(london.market).toEqual({ price: 7, buys: ['cotton', 'coal', 'iron', 'port', 'shipyard'] })
-    expect(board.towns.filter((t) => t.kind === 'stop').map((t) => t.id)).toEqual(['brecon', 'lichfield', 'reading', 'taunton'])
+    expect(board.towns.filter((t) => t.kind === 'stop').map((t) => t.id)).toEqual(['brecon', 'reading', 'taunton'])
+    expect(board.towns.find((t) => t.id === 'lichfield')!.slots).toEqual([['coal']])
   })
 })
 
@@ -68,12 +69,15 @@ describe('eras', () => {
     expect(() => applyAction(rail, { type: 'link', routeId: 'stoke-derby' })).toThrow(/rail era/)
   })
 
-  it('builds a dual route as the era’s kind, and old canals keep carrying goods', () => {
+  it('builds a dual route as the era’s kind, and takes the canals off when the rail era begins', () => {
     let g = newGame()
     g = applyAction(g, { type: 'link', routeId: 'gloucester-bristol' })
     expect(g.links['gloucester-bristol']).toEqual({ owner: 0, kind: 'canal' })
     g = skipTo(g, 6)
-    expect(findPath(g, 1, 'gloucester', 'bristol')?.routeIds).toEqual(['gloucester-bristol'])
+    // As in Brass: every canal link is removed at the start of the rail era.
+    expect(g.links).toEqual({})
+    expect(g.log.some((e) => /canals close and 1 canal link is removed/.test(e.text))).toBe(true)
+    expect(findPath(g, 1, 'gloucester', 'bristol')).toBeNull()
     const player = g.turnOrder[g.turnIndex]
     g = applyAction(g, { type: 'link', routeId: 'bristol-swindon' })
     expect(g.links['bristol-swindon']).toEqual({ owner: player, kind: 'rail' })
@@ -91,38 +95,41 @@ describe('eras', () => {
 describe('stops and hubs', () => {
   it('lets links reach through stops', () => {
     let g = newGame()
-    g = applyAction(g, { type: 'link', routeId: 'lichfield-stoke' })
-    expect(networkTowns(g, 0).has('lichfield')).toBe(true)
-    expect(buildTargets(g, 'coal').some((p) => p.townId === 'lichfield')).toBe(false)
+    g = applyAction(g, { type: 'link', routeId: 'reading-oxford' })
+    expect(networkTowns(g, 0).has('reading')).toBe(true)
+    expect(buildTargets(g, 'cotton').some((p) => p.townId === 'reading')).toBe(false)
   })
 
   it('sells at the hubs that buy the goods, and scores hubs in your network', () => {
     const g = newGame()
     g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'birmingham', slot: 2, goods: 2 })
-    g.links['lichfield-birmingham'] = { owner: 0, kind: 'canal' }
-    g.links['lichfield-stoke'] = { owner: 1, kind: 'canal' }
-    g.links['the_north-stoke'] = { owner: 0, kind: 'canal' }
-    g.links['birmingham-oxford'] = { owner: 0, kind: 'canal' }
+    g.links['birmingham-oxford'] = { owner: 1, kind: 'canal' }
     g.links['reading-oxford'] = { owner: 0, kind: 'canal' }
     g.links['london-reading'] = { owner: 0, kind: 'canal' }
+    // The North has only railways, so it can't be reached in the canal era.
     const quotes = shipQuotes(g, 900)
-    expect(quotes.map((q) => q.marketId).sort()).toEqual(['london', 'the_north'])
-    const london = quotes.find((option) => option.marketId === 'london')!
-    expect([london.revenue, london.tollTotal]).toEqual([7 + 6, 0])
+    expect(quotes.map((q) => q.marketId)).toEqual(['london'])
+    const [q] = quotes
+    expect(q.revenue).toBe(7 + 6)
+    expect(q.tollTotal).toBe(RULES.toll)
+    expect(q.prestige).toBe(2 * 2)
     // A hub that doesn't list cotton won't take it.
     const picky = structuredClone(g)
     picky.board.towns.find((t) => t.id === 'london')!.market!.buys = ['coal']
-    expect(shipQuotes(picky, 900).map((option) => option.marketId)).toEqual(['the_north'])
-    const q = quotes.find((option) => option.marketId === 'the_north')!
-    expect(q.revenue).toBe(6 + 5)
-    expect(q.tollTotal).toBe(RULES.toll)
-    expect(q.prestige).toBe(2 * 2)
-    const after = applyAction(g, { type: 'ship', buildingId: 900, marketId: 'the_north' })
-    expect(after.players[0].money).toBe(g.players[0].money + 11 - RULES.toll)
+    expect(shipQuotes(picky, 900)).toEqual([])
+    const after = applyAction(g, { type: 'ship', buildingId: 900, marketId: 'london' })
+    expect(after.players[0].money).toBe(g.players[0].money + 13 - RULES.toll)
     expect(after.players[1].money).toBe(g.players[1].money + RULES.toll)
-    expect(after.prices.the_north).toBe(4)
-    expect(networkMarkets(after, 0).sort()).toEqual(['london', 'the_north'])
-    expect(scoreFor(after, 0).marketBonus).toBe(2 * RULES.marketBonus)
+    expect(after.prices.london).toBe(5)
+    expect(networkMarkets(after, 0)).toEqual(['london'])
+    expect(scoreFor(after, 0).marketBonus).toBe(RULES.marketBonus)
+  })
+
+  it('reaches The North by rail in the rail era', () => {
+    const g = skipTo(newGame(), 6)
+    g.buildings.push({ id: 900, kind: 'cotton', owner: 0, townId: 'stoke', slot: 1, goods: 1 })
+    g.links['the_north-stoke'] = { owner: 0, kind: 'rail' }
+    expect(shipQuotes(g, 900).map((q) => q.marketId)).toEqual(['the_north'])
   })
 })
 

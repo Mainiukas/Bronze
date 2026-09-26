@@ -3,7 +3,9 @@ import type { MapBoardData } from '../../data/maps'
 import { makesGoods } from '../../game/engine'
 import { INDUSTRIES } from '../../game/rules'
 import type { Board, Building, BoardTown, GameState, IndustryKind } from '../../game/types'
-import { INDUSTRY_GLYPHS, seatColor } from './glyphs'
+import { INDUSTRY_SHORT } from '../../data/board'
+import { INDUSTRY_ICON_URLS } from '../board/assets'
+import { seatColor } from './glyphs'
 
 /** Board geometry, in map units (the board is 160 × 100). */
 const PLOT = 4.6
@@ -52,20 +54,17 @@ function plotOrigin(town: BoardTown, slot: number) {
   return { x: town.x - width / 2 + slot * (PLOT + PLOT_GAP), y: town.y + (town.market ? 5.2 : 4.4) }
 }
 
-/** An industry glyph scaled into a box of `size` at (x, y). */
-function Glyph({ kind, x, y, size }: { kind: IndustryKind; x: number; y: number; size: number }) {
-  const scale = size / 24
-  return (
-    <path
-      d={INDUSTRY_GLYPHS[kind]}
-      transform={`translate(${x} ${y}) scale(${scale})`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  )
+/** An industry's picture (assets/icons) in a box of `size` at (x, y); a short label if the picture is missing. */
+function Glyph({ kind, x, y, size, opacity }: { kind: IndustryKind; x: number; y: number; size: number; opacity?: number }) {
+  const url = INDUSTRY_ICON_URLS[kind]
+  if (!url) {
+    return (
+      <text x={x + size / 2} y={y + size * 0.62} textAnchor="middle" fontSize={size * 0.34} className="fill-parchment-200 font-display font-bold" opacity={opacity}>
+        {INDUSTRY_SHORT[kind]}
+      </text>
+    )
+  }
+  return <image href={url} x={x} y={y} width={size} height={size} opacity={opacity} />
 }
 
 /**
@@ -360,6 +359,7 @@ function Plot({ town, slot, allowed, building, clickable, millPick, selectedMill
             x={allowed.length > 1 ? x + 0.1 + i * 2.3 : x + (PLOT - size) / 2}
             y={y + (PLOT - size) / 2}
             size={size}
+            opacity={0.55}
           />
         ))}
       </g>

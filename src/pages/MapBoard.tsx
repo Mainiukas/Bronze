@@ -21,15 +21,16 @@ import { STORAGE_KEYS } from '../lib/storage'
 /** A few tiles so the board opens showing what built slots and links look like. */
 const SAMPLE_BUILT: BuiltState = {
   slots: {
-    [slotKey('birmingham', 0)]: { player: 0, industry: 'cotton', goods: 2 },
-    [slotKey('merthyr', 0)]: { player: 1, industry: 'iron' },
-    [slotKey('bristol', 0)]: { player: 2, industry: 'port' },
-    [slotKey('stoke', 0)]: { player: 3, industry: 'coal' },
+    [slotKey('birmingham', 0)]: { player: 0, industry: 'cotton', goods: 2, level: 1 },
+    [slotKey('merthyr', 0)]: { player: 1, industry: 'iron', level: 2 },
+    [slotKey('bristol', 0)]: { player: 2, industry: 'port', level: 1 },
+    [slotKey('stoke', 0)]: { player: 3, industry: 'coal', level: 1 },
   },
+  // "Both" links, so a token shows in either era: a barge in the canal era, a locomotive in the rail era.
   links: {
-    'birmingham-oxford': { player: 0, kind: 'canal' },
-    'carmarthen-merthyr': { player: 1, kind: 'canal' },
-    'gloucester-bristol': { player: 2, kind: 'rail' },
+    'birmingham-oxford': { player: 0 },
+    'carmarthen-merthyr': { player: 1 },
+    'gloucester-bristol': { player: 2 },
   },
 }
 
@@ -87,10 +88,10 @@ export function MapBoard() {
       const current = prev.slots[key]
       const slots = { ...prev.slots }
       // Empty or someone else's: take it. Yours: switch to the next allowed industry, then clear.
-      if (!current || current.player !== player) slots[key] = { player, industry: allowed[0] }
+      if (!current || current.player !== player) slots[key] = { player, industry: allowed[0], level: 1 }
       else {
         const next = allowed.indexOf(current.industry) + 1
-        if (next < allowed.length) slots[key] = { player, industry: allowed[next] }
+        if (next < allowed.length) slots[key] = { player, industry: allowed[next], level: 1 }
         else delete slots[key]
       }
       return { ...prev, slots }
@@ -98,12 +99,10 @@ export function MapBoard() {
   }
 
   const placeOnLink = (linkId: string) => {
-    const link = board.links.find((l) => l.id === linkId)
-    if (!link) return
     setBuilt((prev) => {
       const links = { ...prev.links }
       if (links[linkId]?.player === player) delete links[linkId]
-      else links[linkId] = { player, kind: link.type === 'both' ? era : link.type }
+      else links[linkId] = { player }
       return { ...prev, links }
     })
   }
@@ -173,8 +172,8 @@ export function MapBoard() {
             ))}
           </div>
           <p className="text-xs text-parchment-400">
-            {era === 'canal' ? 'Rail-only links' : 'Canal-only links'} are faded and can’t be used. Links drawn with both tracks work in
-            either era. Plymouth and Taunton open in the rail era.
+            Only this era’s links are drawn: {era === 'canal' ? 'canals, with “both” links as canals' : 'railways, with “both” links as railways'}.
+            The North, Taunton and Plymouth can only be reached in the rail era.
           </p>
         </Panel>
 
@@ -279,7 +278,7 @@ function SelectionDetails({ board, era, built, selected }: { board: BoardData; e
           {link.type === 'both' ? 'Canal and rail' : link.type === 'canal' ? 'Canal only' : 'Rail only'} ·{' '}
           {isLinkActive(link.type, era) ? `usable in the ${era} era` : `closed in the ${era} era`}
         </p>
-        <p className="mt-1">{owner ? `Built by ${PLAYER_NAMES[owner.player]} (${owner.kind ?? era})` : 'Not built'}</p>
+        <p className="mt-1">{owner ? `Built by ${PLAYER_NAMES[owner.player]}` : 'Not built'}</p>
         <p className="mt-1 font-mono text-xs text-parchment-500">
           id {link.id}
           {link.points?.length ? ` · ${link.points.length} bend point${link.points.length === 1 ? '' : 's'}` : ' · automatic bend'}

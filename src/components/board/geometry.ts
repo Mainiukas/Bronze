@@ -3,9 +3,8 @@
  * SVG overlay uses viewBox 0 0 1000 1000, so view units = % × 10.
  *
  * A link is a cubic Bézier between its two ends (or a Catmull-Rom spline
- * through its bend points). For drawing, curves are flattened into
- * polylines measured by arc length: textures are laid along them, parallel
- * tracks are offset along their normals, and ends are trimmed at plaques.
+ * through its bend points). Curves are flattened into polylines measured
+ * by arc length for layout checks; textures are laid along the SVG path.
  */
 
 export const VIEW = 1000
@@ -50,7 +49,7 @@ export function unitNormal(a: Point, b: Point): Point {
 
 /* ---- Seeded randomness ---------------------------------------------------- */
 
-/** A stable number in [0, 1) for a string, so automatic bends don't change between renders. */
+/** A stable number stream for a string, so automatic bends don't change between renders. */
 export function seededRandom(key: string): () => number {
   let h = 2166136261
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619)
@@ -107,6 +106,16 @@ export function catmullRom(points: Point[]): Cubic[] {
   return segments
 }
 
+/** SVG path data for cubic segments. */
+export function cubicPath(segments: Cubic[]): string {
+  const f = (n: number) => Math.round(n * 100) / 100
+  if (!segments.length) return ''
+  return (
+    `M${f(segments[0].p0.x)} ${f(segments[0].p0.y)}` +
+    segments.map((s) => `C${f(s.p1.x)} ${f(s.p1.y)} ${f(s.p2.x)} ${f(s.p2.y)} ${f(s.p3.x)} ${f(s.p3.y)}`).join('')
+  )
+}
+
 /* ---- Polylines ------------------------------------------------------------ */
 
 /** A flattened curve with cumulative arc lengths: `lengths[i]` is the distance along it to `points[i]`. */
@@ -133,84 +142,23 @@ export function flatten(segments: Cubic[], step = 2): Polyline {
   return polyline(points)
 }
 
-/** Index of the polyline piece containing arc length s. */
-function pieceAt(line: Polyline, s: number): number {
-  let lo = 0
-  let hi = line.points.length - 1
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1
-    if (line.lengths[mid] <= s) lo = mid
-    else hi = mid
-  }
-  return lo
-}
-
 /** The point at arc length s, and the unit tangent there. */
 export function pointAtLength(line: Polyline, s: number): { point: Point; tangent: Point } {
   const { points, lengths } = line
   if (points.length < 2) return { point: points[0] ?? { x: 0, y: 0 }, tangent: { x: 1, y: 0 } }
   const clamped = Math.min(line.total, Math.max(0, s))
-  const i = Math.min(pieceAt(line, clamped), points.length - 2)
+  let lo = 0
+  let hi = points.length - 1
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1
+    if (lengths[mid] <= clamped) lo = mid
+    else hi = mid
+  }
+  const i = Math.min(lo, points.length - 2)
   const span = lengths[i + 1] - lengths[i] || 1
   const d = sub(points[i + 1], points[i])
   const len = length(d) || 1
   return { point: lerp(points[i], points[i + 1], (clamped - lengths[i]) / span), tangent: { x: d.x / len, y: d.y / len } }
-}
-
-/** The part of a polyline between arc lengths s0 and s1. */
-export function slicePolyline(line: Polyline, s0: number, s1: number): Polyline {
-  if (s1 <= s0) return polyline([pointAtLength(line, s0).point])
-  const inner = line.points.filter((_, i) => line.lengths[i] > s0 && line.lengths[i] < s1)
-  return polyline([pointAtLength(line, s0).point, ...inner, pointAtLength(line, s1).point])
-}
-
-/** A polyline running parallel at distance d (positive = the unitNormal side of travel). */
-export function offsetPolyline(line: Polyline, d: number): Polyline {
-  const { points } = line
-  if (points.length < 2) return line
-  const shifted = points.map((p, i) => {
-    // Average the normals of the pieces either side of each vertex.
-    const a = points[Math.max(0, i - 1)]
-    const b = points[Math.min(points.length - 1, i + 1)]
-    return add(p, scale(unitNormal(a, b), d))
-  })
-  return polyline(shifted)
-}
-
-/**
- * Arc lengths where the line first leaves `insideStart` and last comes out of
- * `insideEnd`, walking in from each end: the visible part between two shapes.
- */
-export function visibleSpan(line: Polyline, insideStart: (p: Point) => boolean, insideEnd: (p: Point) => boolean): [number, number] {
-  const { points, lengths } = line
-  const refine = (inside: (p: Point) => boolean, iIn: number, iOut: number) => {
-    // Binary search between a sample inside and one outside.
-    let a = lengths[iIn]
-    let b = lengths[iOut]
-    for (let k = 0; k < 12; k++) {
-      const m = (a + b) / 2
-      if (inside(pointAtLength(line, m).point)) a = m
-      else b = m
-    }
-    return (a + b) / 2
-  }
-  let start = 0
-  for (let i = 0; i < points.length; i++) {
-    if (!insideStart(points[i])) {
-      start = i === 0 ? 0 : refine(insideStart, i - 1, i)
-      break
-    }
-    if (i === points.length - 1) start = line.total / 2
-  }
-  let end = line.total
-  for (let i = points.length - 1; i >= 0; i--) {
-    if (!insideEnd(points[i])) {
-      end = i === points.length - 1 ? line.total : refine(insideEnd, i + 1, i)
-      break
-    }
-    if (i === 0) end = line.total / 2
-  }
-  return end > start ? [start, end] : [(start + end) / 2, (start + end) / 2]
 }
 
 /** SVG path data for a polyline, rounded to 0.1 unit. */
@@ -219,42 +167,170 @@ export function polylinePath(line: Polyline): string {
   return line.points.map((p, i) => `${i ? 'L' : 'M'}${f(p.x)} ${f(p.y)}`).join('')
 }
 
-/* ---- Texture slices ------------------------------------------------------- */
+function segmentDistance(p: Point, a: Point, b: Point): number {
+  const d = sub(b, a)
+  const len2 = d.x * d.x + d.y * d.y
+  const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * d.x + (p.y - a.y) * d.y) / len2)) : 0
+  return distance(p, { x: a.x + d.x * t, y: a.y + d.y * t })
+}
+
+/** Distance from a point to a polyline. */
+export function distanceToLine(p: Point, line: Polyline): number {
+  let nearest = Infinity
+  for (let i = 1; i < line.points.length; i++) nearest = Math.min(nearest, segmentDistance(p, line.points[i - 1], line.points[i]))
+  return line.points.length === 1 ? distance(p, line.points[0]) : nearest
+}
+
+/** Smallest distance between two polylines (0 if they cross). */
+export function lineGap(a: Polyline, b: Polyline): number {
+  let nearest = Infinity
+  for (const p of a.points) nearest = Math.min(nearest, distanceToLine(p, b))
+  for (const p of b.points) nearest = Math.min(nearest, distanceToLine(p, a))
+  return segmentsCross(a, b) ? 0 : nearest
+}
+
+function segmentsCross(a: Polyline, b: Polyline): boolean {
+  const cross = (o: Point, p: Point, q: Point) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x)
+  for (let i = 1; i < a.points.length; i++) {
+    for (let j = 1; j < b.points.length; j++) {
+      const [p1, p2, q1, q2] = [a.points[i - 1], a.points[i], b.points[j - 1], b.points[j]]
+      const d1 = cross(q1, q2, p1)
+      const d2 = cross(q1, q2, p2)
+      const d3 = cross(p1, p2, q1)
+      const d4 = cross(p1, p2, q2)
+      if (d1 * d2 < 0 && d3 * d4 < 0) return true
+    }
+  }
+  return false
+}
+
+export function lineBounds(line: Polyline): Rect {
+  const xs = line.points.map((p) => p.x)
+  const ys = line.points.map((p) => p.y)
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+}
+
+/* ---- Texture pieces ------------------------------------------------------- */
 
 /**
- * One straight slice of a textured track: drawn at (x, y), rotated by `angle`
- * degrees, `w` long, showing the texture from `u` (its position along the
- * repeating texture). Slices overlap by `overlap` so bends show no gaps.
+ * One piece of a textured route: a quad between the route's normals at two
+ * points along it, filled with the texture rotated to the route there. `u` is
+ * where the piece starts in the repeating texture. Neighbouring quads share
+ * an edge exactly, so pieces sit edge to edge with no overlap and no gap.
  */
-export interface TrackSlice {
+export interface TexturePiece {
+  quad: [Point, Point, Point, Point]
   x: number
   y: number
   angle: number
   u: number
-  w: number
 }
 
 /**
- * Cut a track into straight slices that follow the line. Each texture piece
- * (`pieceLength` long, repeated end to end) is split into equal slices of at
- * most `maxSlice`; the last slice stops exactly at the end of the line.
+ * Cut a route into texture pieces. `at(s)` gives the point and unit tangent
+ * at arc length s (from getPointAtLength, or a polyline). Each repeat of the
+ * texture (`pieceLength`) is split into equal pieces of at most `maxPiece` so
+ * they follow the curve; the last one stops exactly at the end.
  */
-export function trackSlices(line: Polyline, pieceLength: number, maxSlice = 16, overlap = 1): TrackSlice[] {
-  const perPiece = Math.max(1, Math.ceil(pieceLength / maxSlice))
-  const step = pieceLength / perPiece
-  const slices: TrackSlice[] = []
-  for (let s = 0; s < line.total - 0.01; s += step) {
-    const end = Math.min(line.total, s + step)
-    const a = pointAtLength(line, s).point
-    const b = pointAtLength(line, end).point
-    const angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-    const isLast = end >= line.total
-    slices.push({ x: a.x, y: a.y, angle, u: s % pieceLength, w: distance(a, b) + (isLast ? 0 : overlap) })
+export function texturePieces(
+  at: (s: number) => { point: Point; tangent: Point },
+  total: number,
+  pieceLength: number,
+  height: number,
+  maxPiece = 12,
+): TexturePiece[] {
+  const step = pieceLength / Math.max(1, Math.ceil(pieceLength / maxPiece))
+  const half = height / 2 + 1
+  const pieces: TexturePiece[] = []
+  for (let s = 0; s < total - 0.01; s += step) {
+    const e = Math.min(total, s + step)
+    const a = at(s)
+    const b = at(e)
+    const na = { x: -a.tangent.y, y: a.tangent.x }
+    const nb = { x: -b.tangent.y, y: b.tangent.x }
+    pieces.push({
+      quad: [add(a.point, scale(na, half)), add(b.point, scale(nb, half)), sub(b.point, scale(nb, half)), sub(a.point, scale(na, half))],
+      x: a.point.x,
+      y: a.point.y,
+      angle: (Math.atan2(b.point.y - a.point.y, b.point.x - a.point.x) * 180) / Math.PI,
+      u: s % pieceLength,
+    })
   }
-  return slices
+  return pieces
 }
 
-/* ---- Rects and shapes ----------------------------------------------------- */
+/**
+ * The rotation for art laid along a route (link tokens): if the route's angle
+ * is between 90° and 270°, turn it 180° so the barge or train is never upside down.
+ */
+export function upright(angle: number): number {
+  const a = ((angle % 360) + 360) % 360
+  return a > 90 && a < 270 ? a - 180 : a
+}
+
+/* ---- Hulls ---------------------------------------------------------------- */
+
+/** Convex hull (counter-clockwise on screen) of a set of points. */
+export function convexHull(points: Point[]): Point[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y)
+  const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+  const build = (list: Point[]) => {
+    const out: Point[] = []
+    for (const p of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop()
+      out.push(p)
+    }
+    out.pop()
+    return out
+  }
+  return [...build(sorted), ...build([...sorted].reverse())]
+}
+
+/** A closed outline measured by perimeter position. */
+export interface Outline {
+  points: Point[]
+  /** Perimeter position of each vertex. */
+  lengths: number[]
+  perimeter: number
+}
+
+export function outline(points: Point[]): Outline {
+  const lengths = [0]
+  for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1] + distance(points[i - 1], points[i]))
+  return { points, lengths, perimeter: lengths[lengths.length - 1] + distance(points[points.length - 1], points[0]) }
+}
+
+/** The outline's point at perimeter position p (wraps around). */
+export function outlinePoint(o: Outline, p: number): Point {
+  const pos = ((p % o.perimeter) + o.perimeter) % o.perimeter
+  let i = 0
+  while (i < o.points.length - 1 && o.lengths[i + 1] <= pos) i++
+  const a = o.points[i]
+  const b = o.points[(i + 1) % o.points.length]
+  const span = (i + 1 < o.points.length ? o.lengths[i + 1] : o.perimeter) - o.lengths[i] || 1
+  return lerp(a, b, (pos - o.lengths[i]) / span)
+}
+
+/** Perimeter position where a ray from `from` (inside) in direction `dir` leaves the outline. */
+export function rayExit(o: Outline, from: Point, dir: Point): number {
+  let best = { t: Infinity, pos: 0 }
+  for (let i = 0; i < o.points.length; i++) {
+    const a = o.points[i]
+    const b = o.points[(i + 1) % o.points.length]
+    const e = sub(b, a)
+    const denom = dir.x * e.y - dir.y * e.x
+    if (Math.abs(denom) < 1e-9) continue
+    const w = sub(a, from)
+    const t = (w.x * e.y - w.y * e.x) / denom
+    const u = (w.x * dir.y - w.y * dir.x) / denom
+    if (t > 0 && u >= 0 && u <= 1 && t < best.t) best = { t, pos: o.lengths[i] + u * distance(a, b) }
+  }
+  return best.pos
+}
+
+/* ---- Rects ---------------------------------------------------------------- */
 
 export const inflate = (r: Rect, by: number): Rect => ({ x: r.x - by, y: r.y - by, w: r.w + by * 2, h: r.h + by * 2 })
 

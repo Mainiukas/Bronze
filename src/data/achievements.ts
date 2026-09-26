@@ -35,7 +35,7 @@ export interface MatchSummary {
   players: number
   goodsShipped: number
   links: number
-  works: number
+  shipyards: number
 }
 
 export interface Achievement {
@@ -55,7 +55,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'full-house', name: 'Full House', description: 'Win a four-player match.', earned: (m) => m.won && m.players >= 4 },
   { id: 'merchant-fleet', name: 'Merchant Fleet', description: 'Ship 12 goods in one match.', earned: (m) => m.goodsShipped >= 12 },
   { id: 'iron-web', name: 'Iron Web', description: 'Own 6 links in one match.', earned: (m) => m.links >= 6 },
-  { id: 'engine-room', name: 'Engine Room', description: 'Build 2 Engine Works or Shipyards in one match.', earned: (m) => m.works >= 2 },
+  { id: 'engine-room', name: 'Shipwright', description: 'Build 2 Shipyards in one match.', earned: (m) => m.shipyards >= 2 },
   { id: 'tycoon', name: 'Tycoon', description: 'Score 55 or more in a match.', earned: (m) => m.score >= 55 },
   {
     id: 'grand-tour',
@@ -86,7 +86,7 @@ export function recordMatch(stats: PlayerStats, game: GameState): { stats: Playe
     players: game.players.length,
     goodsShipped: you.goodsShipped,
     links: Object.values(game.links).filter((link) => link.owner === 0).length,
-    works: game.buildings.filter((b) => b.owner === 0 && (b.kind === 'works' || b.kind === 'shipyard')).length,
+    shipyards: game.buildings.filter((b) => b.owner === 0 && b.kind === 'shipyard').length,
   }
   const next: PlayerStats = {
     matches: stats.matches + 1,

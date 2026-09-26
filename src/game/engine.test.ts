@@ -180,7 +180,7 @@ describe('rounds', () => {
     g.buildings.push(
       { id: 901, kind: 'coal', owner: 0, townId: 'lowford', slot: 0, goods: 0 },
       { id: 902, kind: 'cotton', owner: 0, townId: 'lowford', slot: 1, goods: 3 },
-      { id: 903, kind: 'works', owner: 1, townId: 'saltport', slot: 1, goods: 0 },
+      { id: 903, kind: 'shipyard', owner: 1, townId: 'saltport', slot: 1, goods: 0 },
     )
     g.players[0].coal = RULES.storeCap
     g.prices.saltport = 2

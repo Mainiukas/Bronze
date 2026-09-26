@@ -3,14 +3,13 @@
  * take laid-out geometry (view units) and draw it in the board's style.
  */
 
-import type { Era, HubLocation, Industry } from '../../data/board'
-import { flatHexagonPath, polylinePath, type Point, type Polyline, type Rect, type TrackSlice } from './geometry'
-import { BARREL_HOOPS, BARREL_SILHOUETTE, BOAT_SILHOUETTE, BOARD_ICONS, LOCOMOTIVE_SILHOUETTE } from './icons'
+import { INDUSTRY_SHORT, type Era, type HubLocation, type Industry } from '../../data/board'
+import { imageOk, INDUSTRY_ICON_URLS, LINK_SYMBOL_URL, MERCHANT_URL, TEXTURE_URLS, TOKEN_ART_URLS } from './assets'
+import { flatHexagonPath, upright, type Point, type Rect, type TexturePiece } from './geometry'
+import { BARREL_HOOPS, BARREL_SILHOUETTE, LOCOMOTIVE_SILHOUETTE } from './icons'
 import {
   BADGE,
   BONUS_R,
-  CANAL_H,
-  CANAL_PIECE,
   CITY_TRACKING,
   CITY_WEIGHT,
   EMBLEM_R,
@@ -18,14 +17,18 @@ import {
   HUB_SLOT_W,
   HUB_TRACKING,
   HUB_WEIGHT,
-  MARKER_H,
-  MARKER_W,
+  IRON_RING,
+  LINK_H,
+  LINK_W,
   MEDALLION_R,
   RAIL_BADGE_R,
-  RAIL_H,
-  RAIL_PIECE,
+  RIBBON_TAIL,
   STOP_TRACKING,
   STOP_WEIGHT,
+  TEXTURE_PIECE,
+  TOKEN_H,
+  TOKEN_W,
+  TRACK_H,
   type HubParts,
   type StopParts,
 } from './layout'
@@ -33,8 +36,10 @@ import { BOARD_COLORS as C, DEF } from './style'
 
 const f = (n: number) => Math.round(n * 100) / 100
 
-/** Filters, texture patterns, the tile vignette and the icon images, defined once per board. */
-export function BoardDefs({ textures, icons }: { textures: Partial<Record<Era, string>>; icons: Partial<Record<Industry, string>> }) {
+/* ---- Shared definitions --------------------------------------------------- */
+
+/** Filters, the tile vignette and the texture images, defined once per board. */
+export function BoardDefs() {
   return (
     <defs>
       <filter id={DEF.shadow} x="-20%" y="-30%" width="140%" height="170%">
@@ -43,127 +48,170 @@ export function BoardDefs({ textures, icons }: { textures: Partial<Record<Era, s
       <filter id={DEF.routeShadow} x="-5%" y="-5%" width="110%" height="110%">
         <feGaussianBlur stdDeviation="1.5" />
       </filter>
-      <filter id={DEF.glow} x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="2.5" />
+      <filter id={DEF.tokenShadow} x="-30%" y="-60%" width="160%" height="220%">
+        <feDropShadow dx="1.5" dy="1.5" stdDeviation="2" floodColor="#000" floodOpacity="0.4" />
+      </filter>
+      <filter id={DEF.glow} x="-50%" y="-80%" width="200%" height="260%">
+        <feGaussianBlur stdDeviation="2.2" />
+      </filter>
+      {/* Turns an image into a flat dark silhouette (the rail-era badge's locomotive). */}
+      <filter id={DEF.silhouette}>
+        <feColorMatrix type="matrix" values="0 0 0 0 0.1  0 0 0 0 0.075  0 0 0 0 0.05  0 0 0 1 0" />
       </filter>
       <radialGradient id={DEF.vignette}>
         <stop offset="0.55" stopColor="#000" stopOpacity="0" />
         <stop offset="1" stopColor="#000" stopOpacity="0.5" />
       </radialGradient>
-      {textures.rail && (
-        <pattern id={DEF.texture('rail')} width={RAIL_PIECE} height={RAIL_H} patternUnits="userSpaceOnUse">
-          <image href={textures.rail} width={RAIL_PIECE} height={RAIL_H} preserveAspectRatio="none" />
-        </pattern>
+      {(['canal', 'rail'] as const).map((era) =>
+        imageOk(TEXTURE_URLS[era]) ? (
+          <image key={era} id={DEF.texture(era)} href={TEXTURE_URLS[era]} width={TEXTURE_PIECE[era]} height={TRACK_H[era]} preserveAspectRatio="none" />
+        ) : null,
       )}
-      {textures.canal && (
-        <pattern id={DEF.texture('canal')} width={CANAL_PIECE} height={CANAL_H} patternUnits="userSpaceOnUse">
-          <image href={textures.canal} width={CANAL_PIECE} height={CANAL_H} preserveAspectRatio="none" />
-        </pattern>
-      )}
-      {Object.entries(icons).map(([industry, url]) => (
-        <image key={industry} id={DEF.icon(industry as Industry)} href={url} width={100} height={100} />
-      ))}
     </defs>
   )
 }
 
-/* ---- Icons ---------------------------------------------------------------- */
+/* ---- Industry icons ------------------------------------------------------- */
 
-/** An industry icon in a `size` box centred on (cx, cy): the image if there is one, else the drawn glyph. */
-export function IndustryIcon({ industry, cx, cy, size, image }: { industry: Industry; cx: number; cy: number; size: number; image: boolean }) {
-  const x = cx - size / 2
-  const y = cy - size / 2
-  if (image) return <use href={`#${DEF.icon(industry)}`} transform={`translate(${f(x)} ${f(y)}) scale(${f(size / 100)})`} />
+/**
+ * An industry's picture (assets/icons) in a `size` box centred on (cx, cy).
+ * If the picture is missing, a short label on a dark square instead.
+ */
+export function IndustryIcon({ industry, cx, cy, size }: { industry: Industry; cx: number; cy: number; size: number }) {
+  const url = INDUSTRY_ICON_URLS[industry]
+  if (imageOk(url)) return <image href={url} x={f(cx - size / 2)} y={f(cy - size / 2)} width={f(size)} height={f(size)} />
   return (
-    <g transform={`translate(${f(x)} ${f(y)}) scale(${f(size / 24)})`} fill="none" strokeLinecap="round" strokeLinejoin="round">
-      <path d={BOARD_ICONS[industry]} stroke={C.ink} strokeWidth={3.4} />
-      <path d={BOARD_ICONS[industry]} stroke={C.cream} strokeWidth={2} />
+    <g>
+      <rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} rx={size * 0.15} fill={C.iron} />
+      <text x={cx} y={cy} dy="0.36em" textAnchor="middle" fontSize={size * 0.3} fontWeight={700} className="font-board" fill={C.cream}>
+        {INDUSTRY_SHORT[industry]}
+      </text>
     </g>
   )
 }
 
 /* ---- Routes --------------------------------------------------------------- */
 
-const TRACK_H: Record<Era, number> = { rail: RAIL_H, canal: CANAL_H }
-
-/** A track drawn with its texture, as rotated slices of the repeating pattern. */
-export function TexturedTrack({ kind, slices }: { kind: Era; slices: TrackSlice[] }) {
-  const h = TRACK_H[kind]
+/**
+ * A route drawn with its texture: pieces laid edge to edge along the curve,
+ * each a quad filled with the texture rotated to the route there.
+ */
+export function RouteTexture({ era, id, pieces }: { era: Era; id: string; pieces: TexturePiece[] }) {
+  const h = TRACK_H[era]
+  const piece = TEXTURE_PIECE[era]
   return (
     <g>
-      {slices.map((s, i) => (
-        <rect
-          key={i}
-          x={f(s.u)}
-          width={f(s.w)}
-          height={h}
-          fill={`url(#${DEF.texture(kind)})`}
-          transform={`translate(${f(s.x)} ${f(s.y)}) rotate(${f(s.angle)}) translate(${f(-s.u)} ${-h / 2})`}
-        />
+      <defs>
+        {pieces.map((p, i) => (
+          <pattern
+            key={i}
+            id={`${id}-${i}`}
+            patternUnits="userSpaceOnUse"
+            width={f(piece)}
+            height={h + 4}
+            patternTransform={`translate(${f(p.x)} ${f(p.y)}) rotate(${f(p.angle)}) translate(${f(-p.u)} ${-(h / 2 + 2)})`}
+          >
+            <use href={`#${DEF.texture(era)}`} y={2} />
+          </pattern>
+        ))}
+      </defs>
+      {pieces.map((p, i) => (
+        <polygon key={i} points={p.quad.map((q) => `${f(q.x)},${f(q.y)}`).join(' ')} fill={`url(#${id}-${i})`} shapeRendering="crispEdges" />
       ))}
     </g>
   )
 }
 
-/** The track drawn with strokes: the fallback when its texture can't be loaded. */
-export function StrokedTrack({ kind, line }: { kind: Era; line: Polyline }) {
-  const d = polylinePath(line)
-  if (kind === 'rail') {
+/** The route drawn with strokes: the fallback when its texture can't be loaded. */
+export function RouteStroke({ era, d }: { era: Era; d: string }) {
+  const h = TRACK_H[era]
+  if (era === 'rail') {
     return (
       <>
-        <path d={d} fill="none" stroke="#2a2118" strokeWidth={RAIL_H} strokeDasharray="3 5" />
-        <path d={d} fill="none" stroke="#c2b494" strokeWidth={RAIL_H - 4} />
-        <path d={d} fill="none" stroke="#3b2f22" strokeWidth={RAIL_H - 7} />
+        <path d={d} fill="none" stroke="#2a2118" strokeWidth={h} strokeDasharray="3 5" />
+        <path d={d} fill="none" stroke="#c2b494" strokeWidth={h - 4} />
+        <path d={d} fill="none" stroke="#3b2f22" strokeWidth={h - 7} />
       </>
     )
   }
   return (
     <>
-      <path d={d} fill="none" stroke="#d9d2b8" strokeWidth={CANAL_H} />
-      <path d={d} fill="none" stroke="#5f8f8c" strokeWidth={CANAL_H - 5} />
+      <path d={d} fill="none" stroke="#d9d2b8" strokeWidth={h} />
+      <path d={d} fill="none" stroke="#5f8f8c" strokeWidth={h - 4} />
     </>
   )
 }
 
-/** Soft shadow under a track (the layer adds the blur). */
-export function TrackShadow({ kind, line }: { kind: Era; line: Polyline }) {
-  return <path d={polylinePath(line)} fill="none" stroke="#000" strokeOpacity={0.25} strokeWidth={TRACK_H[kind]} transform="translate(1.5 1.5)" />
+/** Soft shadow under a route (the layer adds the blur). */
+export function RouteShadow({ era, d }: { era: Era; d: string }) {
+  return <path d={d} fill="none" stroke="#000" strokeOpacity={0.25} strokeWidth={TRACK_H[era]} transform="translate(1.5 1.5)" />
+}
+
+/* ---- Link spaces and tokens ----------------------------------------------- */
+
+/** A flat hexagon space in the board's bevelled style: link spaces and merchant spaces. */
+function HexSpace({ cx, cy, w, h, glow = false }: { cx: number; cy: number; w: number; h: number; glow?: boolean }) {
+  const tip = h * 0.5
+  return (
+    <g>
+      {glow && <path d={flatHexagonPath(cx, cy, w + 4, h + 4, tip + 2)} fill="none" stroke={C.gold} strokeWidth={5} filter={`url(#${DEF.glow})`} />}
+      <path d={flatHexagonPath(cx, cy, w, h, tip)} fill={C.space} fillOpacity={0.75} stroke={glow ? C.gold : C.bronze} strokeWidth={2} strokeLinejoin="round" />
+      <path d={flatHexagonPath(cx, cy, w - 5, h - 4, tip - 2)} fill="none" stroke={C.bevel} strokeOpacity={0.3} strokeWidth={1} strokeLinejoin="round" />
+    </g>
+  )
+}
+
+/** An empty link space: hexagon with the link symbol, rotated to the route. Glows gold when it can be built. */
+export function LinkSpace({ x, y, angle, glow = false }: { x: number; y: number; angle: number; glow?: boolean }) {
+  const sw = LINK_W * 0.75
+  return (
+    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`}>
+      <HexSpace cx={0} cy={0} w={LINK_W} h={LINK_H} glow={glow} />
+      {imageOk(LINK_SYMBOL_URL) ? (
+        <image href={LINK_SYMBOL_URL} x={-sw / 2} y={-sw / 4} width={sw} height={sw / 2} />
+      ) : (
+        <g fill="#e8b830" stroke="#6b4f10" strokeWidth={0.8}>
+          <line x1={-9} y1={0} x2={9} y2={0} stroke="#8a8a85" strokeWidth={2} />
+          <circle cx={-10} cy={0} r={4} />
+          <circle cx={10} cy={0} r={4} />
+        </g>
+      )}
+    </g>
+  )
 }
 
 /**
- * Hexagonal link marker, rotated to the route. Empty until built; then the
- * owner's colour with a canal boat or a locomotive.
+ * A built link: the owner's token (canal barge or locomotive), rotated to the
+ * route and never upside down. Colours without a token image get a stadium
+ * in that colour with the texture strip and the art on top.
  */
-export function LinkMarker({
-  x,
-  y,
-  angle,
-  owner,
-  kind,
-  glow = false,
-}: {
-  x: number
-  y: number
-  angle: number
-  owner: string | null
-  kind: Era
-  glow?: boolean
-}) {
-  // Keep the boat or engine the right way up.
-  const upright = angle > 90 ? angle - 180 : angle < -90 ? angle + 180 : angle
+export function LinkToken({ x, y, angle, era, token, color }: { x: number; y: number; angle: number; era: Era; token: string | undefined; color: string }) {
   return (
-    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright)})`}>
-      {glow && <path d={flatHexagonPath(0, 0, MARKER_W + 8, MARKER_H + 8, 9)} fill={C.gold} opacity={0.75} filter={`url(#${DEF.glow})`} />}
-      <path
-        d={flatHexagonPath(0, 0, MARKER_W, MARKER_H, 6.5)}
-        fill={owner ?? C.marker}
-        fillOpacity={owner ? 1 : 0.7}
-        stroke={C.bronze}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-      />
-      <path d={flatHexagonPath(0, 0, MARKER_W - 5, MARKER_H - 4, 4.8)} fill="none" stroke={C.markerLine} strokeOpacity={0.3} strokeWidth={0.6} />
-      {owner && <path d={kind === 'rail' ? LOCOMOTIVE_SILHOUETTE : BOAT_SILHOUETTE} fill={C.ink} fillOpacity={0.85} transform="scale(0.78)" />}
+    <g transform={`translate(${f(x)} ${f(y)}) rotate(${f(upright(angle))})`} filter={`url(#${DEF.tokenShadow})`}>
+      {imageOk(token) ? <image href={token} x={-TOKEN_W / 2} y={-TOKEN_H / 2} width={TOKEN_W} height={TOKEN_H} /> : <StadiumToken era={era} color={color} />}
+    </g>
+  )
+}
+
+function StadiumToken({ era, color }: { era: Era; color: string }) {
+  const w = TOKEN_W
+  const h = TOKEN_H
+  const clipId = `ib-stadium-${era}`
+  const art = TOKEN_ART_URLS[era]
+  const artRatio = era === 'canal' ? 188 / 792 : 296 / 766
+  const artW = w * 0.62
+  const artH = artW * artRatio
+  return (
+    <g>
+      <rect x={-w / 2} y={-h / 2} width={w} height={h} rx={h / 2} style={{ fill: color }} stroke={C.ink} strokeWidth={1.2} />
+      <clipPath id={clipId}>
+        <rect x={-w / 2 + 2} y={-h / 2 + 2} width={w - 4} height={h - 4} rx={h / 2 - 2} />
+      </clipPath>
+      <g clipPath={`url(#${clipId})`}>
+        {imageOk(TEXTURE_URLS[era]) && <use href={`#${DEF.texture(era)}`} transform={`translate(${-w / 2} ${h / 2 - 7}) scale(${f(7 / TRACK_H[era])})`} />}
+      </g>
+      <rect x={-w / 2 + 1} y={-h / 2 + 1} width={w - 2} height={h / 2 - 1} rx={h / 2 - 1} fill="#fff" fillOpacity={0.18} />
+      {imageOk(art) && <image href={art} x={-artW / 2} y={h / 2 - 4 - artH} width={artW} height={artH} />}
     </g>
   )
 }
@@ -171,60 +219,45 @@ export function LinkMarker({
 /* ---- Cities --------------------------------------------------------------- */
 
 /**
- * One industry slot: a charcoal tile with the icon of what it allows (two
- * half-size icons for a dual slot), or the owner's tile once built.
+ * One industry slot: a charcoal square with the picture of what it allows (two
+ * smaller pictures for a dual slot), or the owner's tile once built.
  */
-export function SlotTile({
-  rect,
-  allowed,
-  tile,
-  images,
-}: {
-  rect: Rect
-  allowed: Industry[]
-  tile: { industry: Industry; color: string; level?: number } | null
-  images: ReadonlySet<Industry>
-}) {
+export function SlotTile({ rect, allowed, tile }: { rect: Rect; allowed: Industry[]; tile: { industry: Industry; color: string; level?: number } | null }) {
   const { x, y, w, h } = rect
   const cx = x + w / 2
   const cy = y + h / 2
-  const icon = (industry: Industry, at: number, size: number) => (
-    <IndustryIcon key={`${industry}-${at}`} industry={industry} cx={at} cy={cy} size={size} image={images.has(industry)} />
-  )
   if (tile) {
     return (
       <g>
-        <rect x={x} y={y} width={w} height={h} rx={1.5} style={{ fill: tile.color }} stroke="#000" strokeOpacity={0.6} strokeWidth={1.2} />
-        <rect x={x} y={y} width={w} height={h} rx={1.5} fill={`url(#${DEF.vignette})`} opacity={0.6} />
-        {icon(tile.industry, cx, w * 0.8)}
+        <rect x={x} y={y} width={w} height={h} rx={2} style={{ fill: tile.color }} stroke="#000" strokeOpacity={0.6} strokeWidth={1.5} />
+        <rect x={x} y={y} width={w} height={h} rx={2} fill={`url(#${DEF.vignette})`} opacity={0.55} />
+        <IndustryIcon industry={tile.industry} cx={cx} cy={cy} size={w * 0.85} />
         {tile.level !== undefined && (
-          <text x={x + w - 2.5} y={y + h - 2.5} textAnchor="end" fontSize={6.5} fontWeight={800} className="font-board" fill={C.cream} stroke={C.ink} strokeWidth={1.2} paintOrder="stroke">
-            {toRoman(tile.level)}
-          </text>
+          <g>
+            <circle cx={x + 5.5} cy={y + h - 5.5} r={4.6} fill={C.ink} stroke={C.cream} strokeWidth={0.8} />
+            <text x={x + 5.5} y={y + h - 5.5} dy="0.36em" textAnchor="middle" fontSize={6.5} fontWeight={800} className="font-display" fill={C.cream}>
+              {tile.level}
+            </text>
+          </g>
         )}
       </g>
     )
   }
   return (
     <g>
-      <rect x={x} y={y} width={w} height={h} rx={1.5} fill={C.tile} stroke={C.tileEdge} strokeWidth={0.9} />
-      <rect x={x} y={y} width={w} height={h} rx={1.5} fill={`url(#${DEF.vignette})`} />
-      <rect x={x + 1.2} y={y + 1.2} width={w - 2.4} height={h - 2.4} rx={1} fill="none" stroke="#fff" strokeOpacity={0.05} strokeWidth={0.6} />
+      <rect x={x} y={y} width={w} height={h} rx={2} fill={C.tile} stroke={C.tileEdge} strokeWidth={1.5} />
+      <rect x={x} y={y} width={w} height={h} rx={2} fill={`url(#${DEF.vignette})`} />
       {allowed.length === 1 ? (
-        icon(allowed[0], cx, w * 0.8)
+        <IndustryIcon industry={allowed[0]} cx={cx} cy={cy} size={w * 0.85} />
       ) : (
         <>
-          <line x1={cx} y1={y + 3} x2={cx} y2={y + h - 3} stroke={C.tileEdge} strokeWidth={0.6} />
-          {icon(allowed[0], x + w * 0.26, w * 0.45)}
-          {icon(allowed[1], x + w * 0.74, w * 0.45)}
+          <IndustryIcon industry={allowed[0]} cx={x + w * 0.26} cy={cy} size={w * 0.48} />
+          <IndustryIcon industry={allowed[1]} cx={x + w * 0.74} cy={cy} size={w * 0.48} />
+          <line x1={cx} y1={y + 4} x2={cx} y2={y + h - 4} stroke={C.bronze} strokeWidth={1} />
         </>
       )}
     </g>
   )
-}
-
-function toRoman(n: number): string {
-  return ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][n] ?? String(n)
 }
 
 /** Flat name plate in the region's colour, with a darker bevel and cream capitals. */
@@ -246,7 +279,7 @@ export function NamePlate({ rect, color, name, fontSize }: { rect: Rect; color: 
       <rect x={x} y={y} width={w} height={h} fill={color} />
       <rect x={x + 0.5} y={y + 0.5} width={w - 1} height={h - 1} fill="none" stroke="#000" strokeOpacity={0.4} strokeWidth={1} />
       <line x1={x + 1.5} y1={y + 1.6} x2={x + w - 1.5} y2={y + 1.6} stroke="#fff" strokeOpacity={0.14} strokeWidth={0.6} />
-      <text {...text} fill="#000" fillOpacity={0.55} transform="translate(0.5 0.7)">
+      <text {...text} fill="#000" fillOpacity={0.55} transform="translate(0.6 0.8)">
         {name.toUpperCase()}
       </text>
       <text {...text} fill={C.cream}>
@@ -289,61 +322,45 @@ export function StopPlaque({ parts, name, fontSize }: { parts: StopParts; name: 
 /* ---- Trade hubs ----------------------------------------------------------- */
 
 /**
- * A trade hub: two merchant slots on top of a round medallion with a painted
- * scene, crossed by a ribbon with the name, and the goods it buys below.
+ * A trade hub: two merchant spaces on top of a round medallion with the hub's
+ * photo, crossed by a ribbon with the name, and the goods it buys below.
  */
-export function HubGroup({
-  location,
-  parts,
-  fontSize,
-  scene,
-  images,
-}: {
-  location: HubLocation
-  parts: HubParts
-  fontSize: number
-  /** Image for the medallion, or null to draw the built-in scene. */
-  scene: string | null
-  images: ReadonlySet<Industry>
-}) {
+export function HubGroup({ location, parts, fontSize, photo }: { location: HubLocation; parts: HubParts; fontSize: number; photo: string | null }) {
   const m = parts.medallion
   const R = MEDALLION_R
-  const inner = R - 5
-  const clipId = `ib-scene-${location.id}`
+  const inner = R - IRON_RING
+  const clipId = `ib-photo-${location.id}`
   const { x, y, w, h } = parts.ribbon
-  const tail = 8
+  const tail = RIBBON_TAIL
   const drop = 3
-  const notch = 4.5
+  const notch = 5
   const leftTail = `M${f(x + 5)} ${f(y + drop)}H${f(x - tail)}L${f(x - tail + notch)} ${f(y + drop + h / 2)}L${f(x - tail)} ${f(y + drop + h)}H${f(x + 5)}Z`
   const rightTail = `M${f(x + w - 5)} ${f(y + drop)}H${f(x + w + tail)}L${f(x + w + tail - notch)} ${f(y + drop + h / 2)}L${f(x + w + tail)} ${f(y + drop + h)}H${f(x + w - 5)}Z`
   const folds = [`M${f(x)} ${f(y + h)}L${f(x + 5)} ${f(y + h + drop)}H${f(x)}Z`, `M${f(x + w)} ${f(y + h)}L${f(x + w - 5)} ${f(y + h + drop)}H${f(x + w)}Z`]
   const spacing = fontSize * HUB_TRACKING
   const icons = parts.icons
-  const strip = icons.length ? { x: icons[0].x - 2, y: icons[0].y - 1.5, w: icons.at(-1)!.x + icons.at(-1)!.w - icons[0].x + 4, h: icons[0].h + 3 } : null
+  const strip = icons.length ? { x: icons[0].x - 2.5, y: icons[0].y - 2, w: icons.at(-1)!.x + icons.at(-1)!.w - icons[0].x + 5, h: icons[0].h + 4 } : null
   return (
     <g filter={`url(#${DEF.shadow})`}>
-      {/* Merchant slots */}
-      {parts.slots.map((r) => (
-        <g key={r.x}>
-          <path d={flatHexagonPath(r.x + r.w / 2, r.y + r.h / 2, HUB_SLOT_W, HUB_SLOT_H, 7)} fill={C.tile} stroke={C.bronze} strokeWidth={1.3} strokeLinejoin="round" />
-          <path d={flatHexagonPath(r.x + r.w / 2, r.y + r.h / 2, HUB_SLOT_W - 5, HUB_SLOT_H - 4, 5.5)} fill="none" stroke={C.markerLine} strokeOpacity={0.25} strokeWidth={0.6} />
-        </g>
-      ))}
-      {/* Medallion: painted scene inside a thick iron ring with a bronze rim */}
+      {/* Merchant spaces: merchant tiles go here later */}
+      {parts.slots.map((r) => {
+        const size = HUB_SLOT_H * 0.7
+        return (
+          <g key={r.x}>
+            <HexSpace cx={r.x + r.w / 2} cy={r.y + r.h / 2} w={HUB_SLOT_W} h={HUB_SLOT_H} />
+            {imageOk(MERCHANT_URL) && <image href={MERCHANT_URL} x={r.x + r.w / 2 - size / 2} y={r.y + r.h / 2 - size / 2} width={size} height={size} />}
+          </g>
+        )
+      })}
+      {/* Medallion: the hub's photo inside a thick iron ring with a bronze inner rim */}
       <clipPath id={clipId}>
         <circle cx={m.x} cy={m.y} r={inner} />
       </clipPath>
-      <g clipPath={`url(#${clipId})`}>
-        {scene ? (
-          <image href={scene} x={m.x - inner} y={m.y - inner} width={inner * 2} height={inner * 2} preserveAspectRatio="xMidYMid slice" />
-        ) : (
-          <HubScene id={location.id} c={m} r={inner} />
-        )}
-      </g>
-      <circle cx={m.x} cy={m.y} r={inner + 2.6} fill="none" stroke={C.iron} strokeWidth={5.2} />
-      <circle cx={m.x} cy={m.y} r={inner + 2.6} fill="none" stroke="#fff" strokeOpacity={0.08} strokeWidth={0.8} />
-      <circle cx={m.x} cy={m.y} r={R + 0.6} fill="none" stroke={C.bronze} strokeWidth={1.2} />
-      <circle cx={m.x} cy={m.y} r={inner} fill="none" stroke={C.bronze} strokeOpacity={0.7} strokeWidth={0.6} />
+      <circle cx={m.x} cy={m.y} r={inner} fill="#6f6a5c" />
+      {photo && <image href={photo} x={m.x - inner - 1} y={m.y - inner - 1} width={inner * 2 + 2} height={inner * 2 + 2} clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid slice" />}
+      <circle cx={m.x} cy={m.y} r={R - IRON_RING / 2} fill="none" stroke={C.iron} strokeWidth={IRON_RING} />
+      <circle cx={m.x} cy={m.y} r={R - IRON_RING / 2} fill="none" stroke="#fff" strokeOpacity={0.1} strokeWidth={0.7} />
+      <circle cx={m.x} cy={m.y} r={inner} fill="none" stroke={C.bronze} strokeWidth={1} />
       {/* Ribbon with folded tails */}
       {[leftTail, rightTail].map((d) => (
         <g key={d}>
@@ -370,9 +387,9 @@ export function HubGroup({
         {location.name.toUpperCase()}
       </text>
       {/* What it buys */}
-      {strip && <rect {...strip} rx={2} fill={C.tile} fillOpacity={0.88} stroke={C.bronze} strokeOpacity={0.6} strokeWidth={0.5} />}
+      {strip && <rect {...strip} rx={2.5} fill={C.tile} fillOpacity={0.85} stroke={C.bronze} strokeOpacity={0.7} strokeWidth={0.6} />}
       {icons.map((r, i) => (
-        <IndustryIcon key={location.buys[i]} industry={location.buys[i]} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={r.w} image={images.has(location.buys[i])} />
+        <IndustryIcon key={location.buys[i]} industry={location.buys[i]} cx={r.x + r.w / 2} cy={r.y + r.h / 2} size={r.w} />
       ))}
     </g>
   )
@@ -384,7 +401,7 @@ export function HubBadges({ parts, value }: { parts: HubParts; value: number }) 
   return (
     <g filter={`url(#${DEF.shadow})`}>
       <rect x={b.x} y={b.y} width={BADGE} height={BADGE} rx={1.5} fill={C.tile} stroke={C.bronze} strokeWidth={1.2} />
-      <text x={b.x + BADGE / 2} y={b.y + BADGE / 2} dy="0.36em" textAnchor="middle" fontSize={8.5} fontWeight={800} className="font-board" fill={C.cream}>
+      <text x={b.x + BADGE / 2} y={b.y + BADGE / 2} dy="0.36em" textAnchor="middle" fontSize={9} fontWeight={800} className="font-board" fill={C.cream}>
         {value}
       </text>
       <circle cx={parts.bonus.x} cy={parts.bonus.y} r={BONUS_R} fill={C.bronze} stroke={C.ink} strokeWidth={1} />
@@ -396,66 +413,22 @@ export function HubBadges({ parts, value }: { parts: HubParts; value: number }) 
   )
 }
 
-/** Simple painted scenes for hubs without an image: hills, a mill town, the city, the sea. */
-function HubScene({ id, c, r }: { id: string; c: Point; r: number }) {
-  const sky = <rect x={c.x - r} y={c.y - r} width={r * 2} height={r * 2} fill="#d6ccad" />
-  const t = (d: string) => `translate(${f(c.x)} ${f(c.y)})` + (d ? ` ${d}` : '')
-  if (id === 'london') {
-    return (
-      <g>
-        {sky}
-        <g transform={t('')}>
-          <path d="M-25 -2h50v27h-50z" fill="#8f8a74" />
-          <path d="M-25 -8h6v6h-6zM-18 -11h5v9h-5zM11 -12h5v10h-5zM17 -7h8v5h-8zM-12 -6h4v4h-4z" fill="#7a5a44" />
-          <path d="M-7 -4a7 7 0 0 1 14 0z" fill="#9c9684" />
-          <path d="M-1 -15h2v4h-2zM-2 -11h4v2h-4z" fill="#7d776a" />
-          <path d="M-9 -4h18v2h-18z" fill="#6c665a" />
-          <path d="M-25 9q12 -3 25 0t25 0v16h-50z" fill="#4f6f73" />
-          <path d="M-18 13h9M3 15h11" stroke="#c7d6cf" strokeOpacity={0.6} strokeWidth={0.8} />
-        </g>
-      </g>
-    )
-  }
-  if (id === 'west_wales') {
-    return (
-      <g>
-        {sky}
-        <g transform={t('')}>
-          <path d="M-25 -4q10 -12 22 -6t10 6v29h-32z" fill="#6f7a45" />
-          <path d="M-25 2q8 -6 16 -2v23h-16z" fill="#56603a" />
-          <path d="M-3 4h28v21h-28z" fill="#4b6a70" />
-          <path d="M4 10h14M8 15h10" stroke="#c7d6cf" strokeOpacity={0.6} strokeWidth={0.8} />
-          <path d="M11 -9v11h7zM10 -7v9h-5z" fill="#e9e1c9" />
-          <path d="M5 3h14l-2 2.5h-10z" fill="#5a3b28" />
-        </g>
-      </g>
-    )
-  }
-  // The North, and any other hub: rolling hills and a mill with chimneys.
-  return (
-    <g>
-      {sky}
-      <g transform={t('')}>
-        <path d="M-10 -14a4 4 0 0 1 7 -2a3.5 3.5 0 0 1 6 1" fill="none" stroke="#b9b3a3" strokeWidth={3} strokeLinecap="round" />
-        <path d="M-25 2q12 -10 25 -4t25 0v27h-50z" fill="#7b8a4c" />
-        <path d="M-25 10q14 -6 28 0t22 -2v17h-50z" fill="#5d6b38" />
-        <path d="M-8 -3h16v8h-16z" fill="#8a4b36" />
-        <path d="M-8 -3l4 -3v3l4 -3v3l4 -3v3l4 -3v3z" fill="#6e3a2a" />
-        <path d="M5 -14h2.5v11h-2.5zM-4 -11h2v8h-2z" fill="#5e3226" />
-      </g>
-    </g>
-  )
-}
-
 /* ---- Badges --------------------------------------------------------------- */
 
-/** "Available in the Rail Era": a locomotive in a bronze circle on the plaque corner. */
+/** "Available in the Rail Era": a locomotive silhouette in a bronze circle on the plaque's top-right corner. */
 export function RailEraBadge({ at }: { at: Point }) {
+  const art = TOKEN_ART_URLS.rail
+  const w = RAIL_BADGE_R * 1.7
+  const h = w * (296 / 766)
   return (
     <g>
       <title>Available in the Rail Era</title>
       <circle cx={at.x} cy={at.y} r={RAIL_BADGE_R} fill={C.bronze} stroke={C.ink} strokeWidth={1} />
-      <path d={LOCOMOTIVE_SILHOUETTE} fill={C.ink} transform={`translate(${f(at.x + 0.3)} ${f(at.y - 0.2)}) scale(0.52)`} />
+      {imageOk(art) ? (
+        <image href={art} x={at.x - w / 2} y={at.y - h / 2} width={w} height={h} filter={`url(#${DEF.silhouette})`} />
+      ) : (
+        <path d={LOCOMOTIVE_SILHOUETTE} fill={C.ink} transform={`translate(${f(at.x + 0.3)} ${f(at.y - 0.2)}) scale(0.6)`} />
+      )}
     </g>
   )
 }
@@ -464,8 +437,8 @@ export function RailEraBadge({ at }: { at: Point }) {
 export function GoodsBadge({ at, goods }: { at: Point; goods: number }) {
   return (
     <g>
-      <circle cx={at.x} cy={at.y} r={5.5} className="fill-brass-300" stroke={C.ink} strokeWidth={1.2} />
-      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={7.5} fontWeight={800} className="font-display" fill={C.ink}>
+      <circle cx={at.x} cy={at.y} r={6.5} className="fill-brass-300" stroke={C.ink} strokeWidth={1.2} />
+      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={9} fontWeight={800} className="font-display" fill={C.ink}>
         {goods}
       </text>
     </g>
@@ -476,10 +449,11 @@ export function GoodsBadge({ at, goods }: { at: Point; goods: number }) {
 export function PriceTag({ at, price }: { at: Point; price: number }) {
   return (
     <g>
-      <rect x={at.x - 12} y={at.y - 7.5} width={24} height={15} rx={3} fill={C.tile} stroke={C.gold} strokeWidth={1} />
-      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={9} fontWeight={800} className="font-display" fill={C.gold}>
+      <rect x={at.x - 13} y={at.y - 8} width={26} height={16} rx={3} fill={C.tile} stroke={C.gold} strokeWidth={1} />
+      <text x={at.x} y={at.y} dy="0.36em" textAnchor="middle" fontSize={10} fontWeight={800} className="font-display" fill={C.gold}>
         £{price}
       </text>
     </g>
   )
 }
+

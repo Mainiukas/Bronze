@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react'
-import type { Industry } from '../../data/board'
+import type { Era, Industry } from '../../data/board'
 
 /**
- * The board's image files. Each is optional: whatever is present in assets/
- * is bundled, and anything missing (or failing to load) falls back to drawn
- * SVG, so art can be swapped by replacing a file.
+ * The board's image files, bundled by Vite. All are preloaded before the
+ * board first renders; any that are missing or fail to load are logged and
+ * replaced by a drawn fallback, so art can be swapped by replacing a file.
  *
  * - assets/map.png, else assets/map.webp: the painted map
- * - assets/icons/{loom,anchor,shipyard,iron,coal}.png: industry icons
+ * - assets/icons/{loom,anchor,shipyard,iron,coal}.png: industry icons (the only industry icons in the game)
  * - assets/textures/{rail,canal}.png: route textures, seamless left to right
- * - assets/hubs/<hub id>.png: the scene inside a trade hub's medallion
+ * - assets/tokens/link_symbol.png, merchant.png: empty link spaces and merchant spaces
+ * - assets/tokens/token_{canal,rail}_<colour>.png: built links, per player colour
+ * - assets/tokens/art_{boat,locomotive}.png: token art for other colours
+ * - assets/hubs/<hub id>.png: the photo in a trade hub's medallion
  */
 
 const MAPS = import.meta.glob<string>('../../../assets/map.{png,webp}', { eager: true, import: 'default' })
 const ICONS = import.meta.glob<string>('../../../assets/icons/*.png', { eager: true, import: 'default' })
 const TEXTURES = import.meta.glob<string>('../../../assets/textures/*.png', { eager: true, import: 'default' })
+const TOKENS = import.meta.glob<string>('../../../assets/tokens/*.png', { eager: true, import: 'default' })
 const HUBS = import.meta.glob<string>('../../../assets/hubs/*.png', { eager: true, import: 'default' })
 
 const file = (files: Record<string, string>, name: string): string | undefined =>
@@ -30,57 +34,87 @@ const ICON_FILES: Record<Industry, string> = {
   coal: 'coal.png',
 }
 
-export const ICON_URLS: Partial<Record<Industry, string>> = Object.fromEntries(
+export const INDUSTRY_ICON_URLS = Object.fromEntries(
   Object.entries(ICON_FILES).map(([industry, name]) => [industry, file(ICONS, name)]),
-)
+) as Record<Industry, string | undefined>
 
-export const TEXTURE_URLS = { rail: file(TEXTURES, 'rail.png'), canal: file(TEXTURES, 'canal.png') }
+export const TEXTURE_URLS: Record<Era, string | undefined> = { rail: file(TEXTURES, 'rail.png'), canal: file(TEXTURES, 'canal.png') }
 
-export const hubSceneUrl = (hubId: string) => file(HUBS, `${hubId}.png`)
+export const LINK_SYMBOL_URL = file(TOKENS, 'link_symbol.png')
+export const MERCHANT_URL = file(TOKENS, 'merchant.png')
+export const TOKEN_ART_URLS: Record<Era, string | undefined> = { canal: file(TOKENS, 'art_boat.png'), rail: file(TOKENS, 'art_locomotive.png') }
 
-/* ---- Load checks ---------------------------------------------------------- */
+/** The colours built-link tokens come in. */
+export const TOKEN_COLORS = ['purple', 'red', 'yellow', 'blue', 'white'] as const
+export type TokenColor = (typeof TOKEN_COLORS)[number]
 
-const loaded = new Map<string, boolean>()
-const pending = new Map<string, Promise<boolean>>()
+export const TOKEN_URLS = Object.fromEntries(
+  (['canal', 'rail'] as const).map((era) => [era, Object.fromEntries(TOKEN_COLORS.map((c) => [c, file(TOKENS, `token_${era}_${c}.png`)]))]),
+) as Record<Era, Record<TokenColor, string | undefined>>
 
-function probe(url: string): Promise<boolean> {
-  const known = loaded.get(url)
-  if (known !== undefined) return Promise.resolve(known)
-  let promise = pending.get(url)
-  if (!promise) {
-    promise = new Promise<boolean>((resolve) => {
-      const img = new Image()
-      img.onload = () => resolve(true)
-      img.onerror = () => resolve(false)
-      img.src = url
-    }).then((ok) => {
-      loaded.set(url, ok)
-      return ok
-    })
-    pending.set(url, promise)
-  }
-  return promise
+export const hubPhotoUrl = (hubId: string) => file(HUBS, `${hubId}.png`)
+
+/* ---- Preloading ----------------------------------------------------------- */
+
+/** Every board image, with a readable name for warnings. */
+function boardImages(): [string, string | undefined][] {
+  return [
+    ['map', MAP_URL || undefined],
+    ...Object.entries(ICON_FILES).map(([industry, name]): [string, string | undefined] => [`icons/${name}`, INDUSTRY_ICON_URLS[industry as Industry]]),
+    ['textures/rail.png', TEXTURE_URLS.rail],
+    ['textures/canal.png', TEXTURE_URLS.canal],
+    ['tokens/link_symbol.png', LINK_SYMBOL_URL],
+    ['tokens/merchant.png', MERCHANT_URL],
+    ['tokens/art_boat.png', TOKEN_ART_URLS.canal],
+    ['tokens/art_locomotive.png', TOKEN_ART_URLS.rail],
+    ...(['canal', 'rail'] as const).flatMap((era) => TOKEN_COLORS.map((c): [string, string | undefined] => [`tokens/token_${era}_${c}.png`, TOKEN_URLS[era][c]])),
+    ...Object.keys(HUBS).map((path): [string, string | undefined] => [`hubs/${path.split('/').pop()}`, HUBS[path]]),
+  ]
 }
 
+const status = new Map<string, boolean>()
+let preloading: Promise<void> | null = null
+
 /**
- * Which of these image URLs can be drawn. Missing URLs count as unusable; a
- * URL is assumed usable while it loads, so textures appear without a flash of
- * the fallback, and only drops to the fallback if it fails.
+ * Load and decode every board image once. Safe to call repeatedly; the app
+ * starts it at launch so the board is usually ready by the time it opens.
  */
-export function useUsableImages(urls: readonly (string | undefined)[]): Set<string> {
-  const key = urls.filter(Boolean).join('\n')
-  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set(urls.filter((u): u is string => !!u && loaded.get(u) === false)))
+export function preloadBoardImages(): Promise<void> {
+  if (preloading) return preloading
+  if (typeof Image === 'undefined') return (preloading = Promise.resolve())
+  preloading = Promise.all(
+    boardImages().map(([name, url]) => {
+      if (!url) {
+        console.warn(`Board image ${name} is missing; drawing a fallback instead.`)
+        return Promise.resolve()
+      }
+      const img = new Image()
+      img.src = url
+      return img
+        .decode()
+        .then(() => void status.set(url, true))
+        .catch(() => {
+          status.set(url, false)
+          console.warn(`Board image ${name} failed to load; drawing a fallback instead.`)
+        })
+    }),
+  ).then(() => undefined)
+  return preloading
+}
+
+/** Can this image be drawn? False for a missing file or one that failed to load. */
+export const imageOk = (url: string | undefined): url is string => !!url && status.get(url) !== false
+
+/** True once every board image has loaded (or failed and been given a fallback). */
+export function useBoardImagesReady(): boolean {
+  const [ready, setReady] = useState(() => typeof Image === 'undefined' || boardImages().every(([, url]) => !url || status.has(url)))
   useEffect(() => {
-    if (typeof Image === 'undefined') return
+    if (ready) return
     let alive = true
-    for (const url of key.split('\n').filter(Boolean)) {
-      void probe(url).then((ok) => {
-        if (alive && !ok) setFailed((prev) => (prev.has(url) ? prev : new Set([...prev, url])))
-      })
-    }
+    void preloadBoardImages().then(() => alive && setReady(true))
     return () => {
       alive = false
     }
-  }, [key])
-  return new Set(urls.filter((u): u is string => !!u && !failed.has(u)))
+  }, [ready])
+  return ready
 }

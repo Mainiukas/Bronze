@@ -33,7 +33,7 @@ export class IllegalActionError extends Error {}
 const MAX_RING: Record<GameModeConfig['mapSize'], number> = { full: 3, reduced: 2, compact: 1 }
 
 /** Plot letters used by schematic maps. */
-const KIND_BY_CODE: Record<string, IndustryKind> = { C: 'coal', I: 'iron', M: 'cotton', W: 'works' }
+const KIND_BY_CODE: Record<string, IndustryKind> = { C: 'coal', I: 'iron', M: 'cotton', S: 'shipyard' }
 
 /** Cut a schematic map down to a mode's size and decode its plots. */
 export function schematicBoard(map: SchematicMapConfig, mapSize: GameModeConfig['mapSize']): Board {
@@ -669,7 +669,14 @@ function endRound(s: GameState) {
   s.turnIndex = 0
   if (s.era === 'canal' && s.railEraRound !== null && s.round >= s.railEraRound) {
     s.era = 'rail'
-    addLog(s, null, `The rail era begins: no more canals can be dug, but railways can now be laid.`)
+    // As in Brass: the canals close, and every canal link comes off the board.
+    const canals = Object.keys(s.links).filter((id) => s.links[id].kind === 'canal')
+    for (const id of canals) delete s.links[id]
+    addLog(
+      s,
+      null,
+      `The rail era begins: the canals close${canals.length ? ` and ${canals.length} canal link${canals.length === 1 ? ' is' : 's are'} removed` : ''}. Railways can now be laid.`,
+    )
   }
   addLog(s, null, `Round ${s.round} of ${s.totalRounds} begins.`)
 }

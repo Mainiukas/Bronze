@@ -22,6 +22,9 @@ export const INDUSTRY_NAMES: Record<Industry, string> = {
   coal: 'Coal mine',
 }
 
+/** Short labels, shown in place of an industry's picture if it can't be loaded. */
+export const INDUSTRY_SHORT: Record<Industry, string> = { cotton: 'COT', port: 'PRT', shipyard: 'SHP', iron: 'IRN', coal: 'COL' }
+
 /** What a hub is buying when it lists each industry. */
 export const GOODS_NAMES: Record<Industry, string> = {
   cotton: 'Cotton',
@@ -103,7 +106,7 @@ export interface BoardLink {
 }
 
 export interface BoardData {
-  version: 2
+  version: 3
   regions: Record<string, Region>
   locations: BoardLocation[]
   links: BoardLink[]
@@ -113,8 +116,8 @@ export interface BoardData {
 export interface BuiltState {
   /** Key from slotKey(locationId, slotIndex). */
   slots: Record<string, { player: number; industry: Industry; goods?: number; level?: number }>
-  /** Link id → owner, and what it was built as (defaults to the era's kind). */
-  links: Record<string, { player: number; kind?: Era }>
+  /** Link id → owner. Built links are drawn as the current era's token. */
+  links: Record<string, { player: number }>
 }
 
 export const EMPTY_BUILT: BuiltState = { slots: {}, links: {} }
@@ -126,7 +129,11 @@ export function slotKey(locationId: string, slotIndex: number): string {
   return `${locationId}:${slotIndex}`
 }
 
-/** Canal links work only in the canal era, rail links only in the rail era, `both` always. */
+/**
+ * Does this link exist in the era? Canal links only in the canal era, rail
+ * links only in the rail era, `both` in both (as a canal, then a railway).
+ * Links of the other era aren't drawn at all.
+ */
 export function isLinkActive(type: LinkType, era: Era): boolean {
   return type === 'both' || type === era
 }
@@ -144,7 +151,7 @@ const isPercent = (v: unknown) => isNumber(v) && v >= 0 && v <= 100
 export function validateBoardData(raw: unknown): string[] {
   const errors: string[] = []
   if (!isObject(raw)) return ['Board data must be an object']
-  if (raw.version !== 2) errors.push('version must be 2')
+  if (raw.version !== 3) errors.push('version must be 3')
 
   const regions = isObject(raw.regions) ? raw.regions : {}
   if (!isObject(raw.regions)) errors.push('regions must be an object')
@@ -259,28 +266,51 @@ export function degrees(board: BoardData): Map<string, number> {
   return count
 }
 
-/**
- * Checks the network against its design: from `start`, canal and "both"
- * links must reach every location except those marked rail-era only, and the
- * degrees must add up to twice the expected number of links.
- */
-export function topologyProblems(board: BoardData, expect: { start: string; links: number }): string[] {
-  const problems: string[] = []
-  const reached = reachable(board, expect.start, 'canal')
-  const unreached = board.locations.filter((l) => !reached.has(l.id)).map((l) => l.id)
-  const railOnly = board.locations.filter((l) => l.era === 'rail').map((l) => l.id)
-  if (unreached.join() !== railOnly.join()) {
-    problems.push(
-      `In the canal era, ${expect.start} should reach everything except ${railOnly.join(', ') || 'nothing'}; it can't reach ${unreached.join(', ') || 'nothing'}`,
-    )
-  }
-  const total = [...degrees(board).values()].reduce((a, b) => a + b, 0)
-  if (total !== expect.links * 2) problems.push(`Location degrees add up to ${total}, expected ${expect.links * 2} (${expect.links} links)`)
-  return problems
+/** What the checked-in board is held to (the checks in the board spec). */
+export interface BoardDesign {
+  /** Canal-era reachability is measured from here. */
+  start: string
+  links: Record<LinkType, number>
+  /** Number of cities with each tile count. */
+  tiles: Record<number, number>
 }
 
-/** The design the checked-in board is held to. */
-export const BOARD_TOPOLOGY = { start: 'the_north', links: 39 }
+export const BOARD_DESIGN: BoardDesign = { start: 'birmingham', links: { both: 16, canal: 6, rail: 17 }, tiles: { 4: 2, 3: 4, 2: 10, 1: 3 } }
+
+/**
+ * Everything about the network that breaks its design, as readable messages:
+ * 1. from `start`, canal and "both" links reach every location except the
+ *    rail-era ones; 2. rail and "both" links reach every location; 3. degrees
+ *    add up to twice the link count, with the right number of each type;
+ *    4. the right number of cities of each tile count.
+ */
+export function designProblems(board: BoardData, design: BoardDesign): string[] {
+  const problems: string[] = []
+  const list = (ids: string[]) => ids.join(', ') || 'nothing'
+  const canal = reachable(board, design.start, 'canal')
+  const unreached = board.locations.filter((l) => !canal.has(l.id)).map((l) => l.id)
+  const railOnly = board.locations.filter((l) => l.era === 'rail').map((l) => l.id)
+  if (unreached.join() !== railOnly.join()) {
+    problems.push(`Canal era: from ${design.start} everything but ${list(railOnly)} should be reachable; unreachable: ${list(unreached)}`)
+  }
+  const rail = reachable(board, design.start, 'rail')
+  const railMissing = board.locations.filter((l) => !rail.has(l.id)).map((l) => l.id)
+  if (railMissing.length) problems.push(`Rail era: can't reach ${list(railMissing)}`)
+  const expectedLinks = design.links.both + design.links.canal + design.links.rail
+  const total = [...degrees(board).values()].reduce((a, b) => a + b, 0)
+  if (total !== expectedLinks * 2) problems.push(`Location degrees add up to ${total}, expected ${expectedLinks * 2} (${expectedLinks} links)`)
+  for (const type of ['both', 'canal', 'rail'] as const) {
+    const count = board.links.filter((l) => l.type === type).length
+    if (count !== design.links[type]) problems.push(`${count} ${type} links, expected ${design.links[type]}`)
+  }
+  const tiles = new Map<number, number>()
+  for (const l of board.locations) if (l.type === 'city') tiles.set(l.slots.length, (tiles.get(l.slots.length) ?? 0) + 1)
+  for (const [n, expected] of Object.entries(design.tiles)) {
+    const count = tiles.get(Number(n)) ?? 0
+    if (count !== expected) problems.push(`${count} cities with ${n} tile${n === '1' ? '' : 's'}, expected ${expected}`)
+  }
+  return problems
+}
 
 /* ------------------------------------------------------------------------ */
 /* Export                                                                    */
@@ -328,6 +358,6 @@ export const BOARD: BoardData = boardJson as BoardData
 
 // Development builds refuse to start on a network that breaks the design (the tests check it too).
 if (import.meta.env.DEV) {
-  const wrong = topologyProblems(BOARD, BOARD_TOPOLOGY)
+  const wrong = designProblems(BOARD, BOARD_DESIGN)
   if (wrong.length) throw new Error(`src/data/board.json breaks the board design:\n${wrong.join('\n')}`)
 }

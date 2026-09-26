@@ -1,6 +1,6 @@
 import type { Era, Industry } from '../../data/board'
 
-/** The board's palette (the spec colours for tiles, plaques, hubs and markers). */
+/** The board's palette (the spec colours for tiles, plaques, hubs and link spaces). */
 export const BOARD_COLORS = {
   tile: '#1b1b1b',
   tileEdge: '#5b4524',
@@ -12,8 +12,8 @@ export const BOARD_COLORS = {
   ribbon: '#c9c9c4',
   iron: '#2b2b2b',
   bronze: '#a07a3c',
-  marker: '#1a1a1a',
-  markerLine: '#e8dcc0',
+  space: '#1a1a1a',
+  bevel: '#e8dcc0',
   glow: '#ffb45e',
   gold: '#f2c14e',
 } as const
@@ -22,8 +22,10 @@ export const BOARD_COLORS = {
 export const DEF = {
   shadow: 'ib-shadow',
   routeShadow: 'ib-route-shadow',
+  tokenShadow: 'ib-token-shadow',
   glow: 'ib-glow',
+  silhouette: 'ib-silhouette',
   vignette: 'ib-vignette',
-  texture: (kind: Era) => `ib-texture-${kind}`,
+  texture: (era: Era) => `ib-texture-${era}`,
   icon: (industry: Industry) => `ib-icon-${industry}`,
 }

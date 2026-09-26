@@ -59,7 +59,6 @@ export function HowToPlayModal({ open, onClose }: InfoModalProps) {
                     </p>
                     <p className="text-xs text-parchment-300">
                       {formatCost(def.cost)} · {def.output}
-                      {kind === 'works' ? ' (original maps only)' : ''}
                     </p>
                   </div>
                 </li>
@@ -71,23 +70,23 @@ export function HowToPlayModal({ open, onClose }: InfoModalProps) {
         <Section title="Wales & the West">
           <ul className="flex flex-col gap-2.5">
             <Rule name="Eras">
-              The match starts in the canal era and switches to the rail era half way through. You can only build routes
-              of the current era: canal-only routes early, rail-only routes late, and routes drawn with both tracks as
-              whichever the era allows. Links already built keep carrying goods.
+              The match starts in the canal era and switches to the rail era half way through. Only that era’s links are on
+              the board: canals first, then railways. A route marked for both is a canal in the canal era and a railway in
+              the rail era. When the rail era begins, every canal link comes off the board, as in Brass.
             </Rule>
             <Rule name="Trade hubs">
               The North, London and West Wales are where cotton is sold, at the price on their tag; it drops as goods are
-              sold. The icons under each ribbon show what the hub trades in. Hubs can’t be built in, but links to them
+              sold. The pictures under each ribbon show what the hub trades in. Hubs can’t be built in, but links to them
               count toward your network.
             </Rule>
             <Rule name="Ports">
               Buy any goods for a flat £{RULES.portPrice}. If you sell at someone else’s port, they get £{RULES.portFee} per
               goods.
             </Rule>
-            <Rule name="Stops">Brecon, Lichfield, Reading and Taunton carry routes but have no building plots.</Rule>
-            <Rule name="Rail-era towns">
-              Plymouth and Taunton (marked with a locomotive) open in the rail era: no canal reaches them and nothing can be
-              built there before it. Plymouth has the map’s only shipyard.
+            <Rule name="Stops">Brecon, Reading and Taunton carry routes but have no building plots.</Rule>
+            <Rule name="Rail-era places">
+              The North, Plymouth and Taunton (marked with a locomotive) can only be reached by rail, so they open in the
+              rail era; nothing can be built in Plymouth before it. Plymouth has the map’s only shipyard.
             </Rule>
             <Rule name="Smaller modes">Blitz and Bullet close the outer towns; they’re drawn faded.</Rule>
           </ul>

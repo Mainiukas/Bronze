@@ -2,9 +2,10 @@ import type { GameModeId } from '../data/gameModes'
 import type { MapId } from '../data/maps'
 
 /** Bump when GameState's shape changes, so old saves are discarded. */
-export const GAME_VERSION = 3
+export const GAME_VERSION = 4
 
-export type IndustryKind = 'coal' | 'iron' | 'cotton' | 'port' | 'shipyard' | 'works'
+/** The five industries: the game has exactly these. */
+export type IndustryKind = 'cotton' | 'port' | 'shipyard' | 'iron' | 'coal'
 export type RouteKind = 'canal' | 'rail'
 export type Era = 'canal' | 'rail'
 

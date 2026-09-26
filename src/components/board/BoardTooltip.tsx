@@ -10,13 +10,15 @@ import {
   type BuiltState,
   type Era,
 } from '../../data/board'
-import type { BoardLayout } from './layout'
+import { IndustryIcon } from '../game/IndustryIcon'
+import type { GroupLayout, RouteLayout } from './layout'
 
 export type TooltipTarget = { type: 'location'; id: string; slot?: number } | { type: 'link'; id: string }
 
 interface BoardTooltipProps {
   board: BoardData
-  layout: BoardLayout
+  groups: ReadonlyMap<string, GroupLayout>
+  routes: ReadonlyMap<string, RouteLayout>
   era: Era
   built: BuiltState
   prices?: Readonly<Record<string, number>>
@@ -33,20 +35,20 @@ const LINK_TYPE_LABEL = { canal: 'Canal', rail: 'Rail', both: 'Canal and rail' }
  * Hover card for a location or link, positioned over the board in % so it
  * follows the board at any size. Flips below the target near the top edge.
  */
-export function BoardTooltip({ board, layout, era, built, prices, playerName, target }: BoardTooltipProps) {
+export function BoardTooltip({ board, groups, routes, era, built, prices, playerName, target }: BoardTooltipProps) {
   let anchor: { x: number; top: number; bottom: number } | null = null
   let body = null
   if (target.type === 'location') {
     const location = board.locations.find((l) => l.id === target.id)
-    const g = layout.groups.get(target.id)
+    const g = groups.get(target.id)
     if (location && g) {
       anchor = { x: g.center.x, top: g.bounds.y, bottom: g.bounds.y + g.bounds.h }
       body = <LocationDetails board={board} era={era} built={built} prices={prices} playerName={playerName} location={location} slot={target.slot} />
     }
   } else {
-    const route = layout.routes.get(target.id)
+    const route = routes.get(target.id)
     if (route) {
-      anchor = { x: route.marker.x, top: route.marker.y - 12, bottom: route.marker.y + 12 }
+      anchor = { x: route.marker.x, top: route.marker.y - 14, bottom: route.marker.y + 14 }
       body = <LinkDetails board={board} era={era} built={built} playerName={playerName} link={route.link} />
     }
   }
@@ -60,7 +62,7 @@ export function BoardTooltip({ board, layout, era, built, prices, playerName, ta
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute z-10 w-max max-w-72 rounded-lg border border-bronze-400/60 bg-soot-950/95 px-3 py-2.5 text-left text-xs text-parchment-200 shadow-[0_10px_30px_-8px_rgb(0_0_0/0.9)]"
+      className="pointer-events-none absolute z-10 w-max max-w-80 rounded-lg border border-bronze-400/60 bg-soot-950/95 px-3 py-2.5 text-left text-xs text-parchment-200 shadow-[0_10px_30px_-8px_rgb(0_0_0/0.9)]"
       style={style}
     >
       {body}
@@ -68,7 +70,7 @@ export function BoardTooltip({ board, layout, era, built, prices, playerName, ta
   )
 }
 
-type DetailsProps = Omit<BoardTooltipProps, 'target' | 'layout'>
+type DetailsProps = Omit<BoardTooltipProps, 'target' | 'groups' | 'routes'>
 
 function Connections({ board, era, location }: { board: BoardData; era: Era; location: BoardLocation }) {
   const name = (id: string) => board.locations.find((l) => l.id === id)?.name ?? id
@@ -107,30 +109,43 @@ function LocationDetails({ board, era, built, prices, playerName, location, slot
       <p className="text-parchment-400">{style}</p>
       {location.era === 'rail' && <p className="font-semibold text-brass-200">Available in the Rail Era</p>}
       {location.type === 'city' && (
-        <ol className="mt-1.5 flex flex-col gap-0.5">
+        <ol className="mt-1.5 flex flex-col gap-1">
           {location.slots.map((allowed, i) => {
             const tile = built.slots[slotKey(location.id, i)]
             return (
-              <li key={i} className={i === slot ? 'text-brass-200' : undefined}>
-                <span className="text-parchment-400">Slot {i + 1}:</span> {allowed.map((a) => INDUSTRY_NAMES[a]).join(' or ')}
-                {tile && (
-                  <span className="text-parchment-50">
-                    {' '}
-                    — {possessive(playerName(tile.player))} {INDUSTRY_NAMES[tile.industry]}
-                    {tile.goods ? ` (${tile.goods} goods)` : ''}
-                  </span>
-                )}
+              <li key={i} className={`flex items-center gap-1.5 ${i === slot ? 'text-brass-200' : ''}`}>
+                <span className="text-parchment-400">{i + 1}.</span>
+                {allowed.map((a) => (
+                  <IndustryIcon key={a} kind={a} className="size-5" />
+                ))}
+                <span>
+                  {allowed.map((a) => INDUSTRY_NAMES[a]).join(' or ')}
+                  {tile && (
+                    <span className="text-parchment-50">
+                      {' '}
+                      — {possessive(playerName(tile.player))} {INDUSTRY_NAMES[tile.industry]}
+                      {tile.goods ? ` (${tile.goods} goods)` : ''}
+                    </span>
+                  )}
+                </span>
               </li>
             )
           })}
         </ol>
       )}
       {location.type === 'hub' && (
-        <p className="mt-1.5">
-          <span className="text-parchment-400">Buys:</span>{' '}
-          {INDUSTRY_IDS.every((i) => location.buys.includes(i)) ? 'Everything' : location.buys.map((b) => GOODS_NAMES[b]).join(', ')}
-          {prices?.[location.id] !== undefined && <span className="text-brass-200"> · £{prices[location.id]} each</span>}
-        </p>
+        <div className="mt-1.5">
+          <p>
+            <span className="text-parchment-400">Buys:</span>{' '}
+            {INDUSTRY_IDS.every((i) => location.buys.includes(i)) ? 'Everything' : location.buys.map((b) => GOODS_NAMES[b]).join(', ')}
+            {prices?.[location.id] !== undefined && <span className="text-brass-200"> · £{prices[location.id]} each</span>}
+          </p>
+          <p className="mt-1 flex gap-1">
+            {location.buys.map((b) => (
+              <IndustryIcon key={b} kind={b} className="size-6" title={GOODS_NAMES[b]} />
+            ))}
+          </p>
+        </div>
       )}
       <Connections board={board} era={era} location={location} />
     </>
@@ -140,20 +155,17 @@ function LocationDetails({ board, era, built, prices, playerName, location, slot
 function LinkDetails({ board, era, built, playerName, link }: DetailsProps & { link: BoardLink }) {
   const name = (id: string) => board.locations.find((l) => l.id === id)?.name ?? id
   const owner = built.links[link.id]
-  const active = isLinkActive(link.type, era)
-  const kind = owner?.kind ?? (link.type === 'both' ? era : link.type)
   return (
     <>
       <p className="font-board text-sm font-bold tracking-wide text-parchment-50">
         {name(link.from)} – {name(link.to)}
       </p>
       <p className="text-parchment-400">
-        {link.type === 'both' ? 'Canal and rail' : `${LINK_TYPE_LABEL[link.type]} only`}
-        {active ? '' : ` · not usable in the ${era} era`}
+        {link.type === 'both' ? `Canal and rail · a ${era === 'canal' ? 'canal' : 'railway'} in this era` : `${LINK_TYPE_LABEL[link.type]} only`}
       </p>
       {owner && (
         <p className="mt-1 text-parchment-50">
-          {kind === 'canal' ? 'Canal dug' : 'Railway laid'} by {playerName(owner.player)}
+          {era === 'canal' ? 'Canal dug' : 'Railway laid'} by {playerName(owner.player)}
         </p>
       )}
     </>

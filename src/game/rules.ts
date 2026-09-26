@@ -118,25 +118,10 @@ export const INDUSTRIES: Record<IndustryKind, IndustryDef> = {
     yields: 'prestige',
     output: '+1 prestige each round',
   },
-  works: {
-    kind: 'works',
-    name: 'Engine Works',
-    cost: { money: 12, coal: 1, iron: 2 },
-    prestige: 5,
-    yields: 'prestige',
-    output: '+1 prestige each round',
-  },
 }
 
 /** Display order. Each board only offers the industries its plots allow. */
-export const INDUSTRY_ORDER: readonly IndustryKind[] = [
-  'coal',
-  'iron',
-  'cotton',
-  'port',
-  'shipyard',
-  'works',
-]
+export const INDUSTRY_ORDER: readonly IndustryKind[] = ['cotton', 'port', 'shipyard', 'iron', 'coal']
 
 export const LINK_COST: Record<RouteKind, Cost> = {
   canal: { money: 3, coal: 0, iron: 0 },
